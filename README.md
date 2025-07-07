@@ -1,5 +1,6 @@
 # Excel-Compare-Tool-Upgraded
 Excel 对比工具使用指南
+
 一、工具简介
 本工具是一款 Excel 文件对比工具，支持对两个 Excel 文件（.xlsx、.xls、.xlsm、.csv 格式）进行深度对比，快速定位文件间的差异点（包括增删行、数据修改等），并以直观的颜色标记呈现对比结果。
 
