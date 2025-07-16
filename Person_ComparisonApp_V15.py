@@ -11,6 +11,7 @@
 ## 待办：增加当前task框，放入当前进度，停止按钮还是失效，需要修复
 ## 已修复
 ## 待办：确认mapping row和mapping col的性能优化效果，继续优化大文件的对比速度
+## 2025/07/08：修复索引列空白时，报“用户手动终止进程”的问题
 
 
 import inspect
@@ -948,7 +949,7 @@ class Person_ComparisonApp:
             index_value_list_file2,
             title_row_number,
         )
-        if not index_column_mapping:
+        if index_column_mapping == 0:
             return 0
         
         step_progress = delta_progress / len(index_column_mapping) if len(index_column_mapping) > 0 else 0
@@ -959,7 +960,7 @@ class Person_ComparisonApp:
         # --------------------- 列映射 --------------------- #
         self.progress_current_task.emit("正在建立列映射关系")
         title_row_mapping = self.mapping_col_by_title(sheet1, sheet2, title_row_number)
-        if not title_row_mapping:
+        if title_row_mapping == 0:
             return 0
         
         col_mapping_time = time.time()
