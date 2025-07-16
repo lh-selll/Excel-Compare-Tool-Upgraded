@@ -24,6 +24,7 @@
 ## 2025/07/02：删除copy sheet，新增当前任务开始和结束的系统时间，解决progress回退问题
 ## 2025/07/03：优化界面布局，缩小高度
 ## 2025/07/03：取消license验证
+## 2025/07/08：修复索引列空白时，报“用户手动终止进程”的问题
 ## 
 ## 
 
@@ -52,12 +53,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
 
-from Person_ComparisonApp_V13 import Person_ComparisonApp
-# from Deviceid_license_verify import DeviceIDLicenseVerify
+from Person_ComparisonApp_V15 import Person_ComparisonApp
 
 output_path = ".\\outputfile"
 json_file_path = '.\\json\\config.json'
-license_file_path = '.\\license\\license.key'
 
 
 class FileSelectorWidget(QWidget):
@@ -1582,128 +1581,6 @@ def resource_path(relative_path):
     # 拼接资源路径（注意使用 os.path.join 确保跨平台兼容）
     return os.path.join(base_path, relative_path)
 
-class InitialScreen(QWidget):
-    def __init__(self, main_window, parent=None):
-        super().__init__(parent)
-        self.setup_ui()
-        self.main_window = main_window
-        
-        # 加载背景图片（使用修复后的图片路径）
-        self.background_pixmap = QPixmap(resource_path("ICO/GUI_ICO2.png"))
-        if self.background_pixmap.isNull():
-            # 尝试加载原始图片（如果修复后的图片不存在）
-            self.background_pixmap = QPixmap(resource_path("ICO/GUI_ICO2.png"))
-            if self.background_pixmap.isNull():
-                print("警告：背景图片加载失败")
-    
-    def setup_ui(self):
-        # 设置窗口标题和大小
-        self.setWindowTitle("欢迎使用")
-        self.resize(800, 600)
-        
-        # 创建垂直布局
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)  # 去除边距
-        layout.setSpacing(0)
-        
-        # 创建一个用于放置按钮的容器（透明）
-        button_container = QWidget()
-        button_container.setStyleSheet("background-color: transparent;")
-        button_layout = QVBoxLayout(button_container)
-        button_layout.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)  # 底部中央
-        button_layout.setContentsMargins(0, 0, 0, 100)  # 底部边距
-        
-        # 创建开始按钮
-        start_button = QPushButton("开始探索")
-        start_button.setMinimumSize(200, 60)  # 增大按钮尺寸，更符合苹果风格
-        start_button.setStyleSheet("""
-                    QPushButton {
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                                stop:0 rgba(148, 217, 255, 0.95),
-                                                stop:1 #007AFF);
-                        color: white;
-                        border-radius: 16px;
-                        font-family: "SF Pro Text";
-                        font-size: 25px;
-                        font-weight: 800;
-                        padding: 16px 32px;
-                        border: none;
-                        box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
-                    }
-                    QPushButton:hover {
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                                stop:0 rgba(180, 228, 255, 0.98),
-                                                stop:1 #0066CC);
-                        box-shadow: 0 8px 16px rgba(0, 122, 255, 0.3);
-                    }
-                    QPushButton:pressed {
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                                stop:0 rgba(100, 180, 255, 0.9),
-                                                stop:1 #005299);
-                        box-shadow: 0 2px 6px rgba(0, 122, 255, 0.1);
-                    }
-        """)
-        # 将按钮添加到容器布局
-        button_layout.addWidget(start_button)
-        
-        # 将按钮容器添加到主布局
-        layout.addWidget(button_container)
-        
-        # 设置按钮点击事件
-        start_button.clicked.connect(self.on_start_clicked)
-    
-    def paintEvent(self, event):
-        """重写绘制事件，绘制背景图片（避免样式表中的图片路径问题）"""
-        if not self.background_pixmap.isNull():
-            painter = QPainter(self)
-            # 缩放图片以覆盖整个窗口（保持宽高比，可能裁剪）
-            scaled_pixmap = self.background_pixmap.scaled(
-                self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-            )
-            # 居中绘制图片
-            x = (self.width() - scaled_pixmap.width()) // 2
-            y = (self.height() - scaled_pixmap.height()) // 2
-            painter.drawPixmap(x, y, scaled_pixmap)
-        else:
-            # 图片加载失败时，绘制灰色背景
-            painter = QPainter(self)
-            painter.fillRect(self.rect(), Qt.gray)
-            # 添加错误文本提示
-            error_label = QLabel("背景图片加载失败", self)
-            error_label.setAlignment(Qt.AlignCenter)
-            error_label.setStyleSheet("color: white; font-size: 16px;")
-            error_label.setGeometry(0, 0, self.width(), self.height())
-    
-    def license_verify(self, license_file_path):
-        print("开始许可证验证")
-        verify_app = DeviceIDLicenseVerify(license_file_path)
-        if not verify_app.verify_license():
-            print("=" * 40)
-            print("授权验证失败，程序无法继续运行。")
-            print("请联系开发者获取有效的授权文件。")
-            sys.exit(1)
-            return 0
-        
-        # 授权通过，运行主程序
-        print("=" * 40)
-        print("Hello World!")
-        print("这是一个经过授权的程序。")
-        print("=" * 40)
-        return 1
-    
-    def on_start_clicked(self):
-        global license_file_path
-        # 点击按钮后，显示主界面并关闭当前界面
-        # 验证签名
-        if self.license_verify(license_file_path):
-            # 打开主窗口
-            self.main_window.show()
-        
-        # 关闭初始化窗口
-        self.close()
-
-        
-
 """程序入口点：初始化应用程序并启动事件循环"""
 try:
 
@@ -1722,12 +1599,9 @@ try:
 
     # 创建主窗口实例（DataProcessingTool 类应继承自 QMainWindow 或 QWidget）
     window = DataProcessingTool()
-    # initial_screen = InitialScreen(window)
-    # initial_screen.show()
     window.show()
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
-    # sys.exit() 确保应用程序退出时返回正确的状态码
     sys.exit(app.exec())
 
 except Exception as e:
