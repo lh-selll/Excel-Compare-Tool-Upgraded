@@ -15,7 +15,7 @@ class FileHandler:
         """初始化Excel文件打开器"""
         self.verbose = verbose
         self.logger = self._setup_logger()
-        self.excel_valid_extensions = ['.xlsx', '.xls', '.xlsm', '.xlsb']
+        self.excel_valid_extensions = ['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv']
         self.text_valid_extensions = (
             '.txt', '.md', '.csv', '.log', '.py', 
             '.html', '.css', '.js', '.json', '.xml'

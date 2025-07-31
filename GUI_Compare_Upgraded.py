@@ -28,6 +28,8 @@
 ## 2025/07/09 进一步压缩界面大小
 ## 2025/07/29：V16,对比结果框中添加"对比结果摘要"，同时将摘要放入对比结果log文件中，以快速浏览对比结果
 ## 2025/07/30：V16,增加三个按钮，分别可以快速打开对比结果excel文件，以及对比结果log文件
+## 2025/07/30：V16,解决处理CSV文件时的问题
+## 2025/07/31：待解决，直接对比时，底部空白行对比有差异
 ##
 ## 
 
@@ -283,10 +285,16 @@ class DataProcessor(QThread):
             wb2 = self.open_file(self.file2_path)   # 打开文件2
             
             # 处理文件路径和输出路径
-            file1_name = os.path.splitext(self.file1_path)[0].split('/')[-1]
-            file2_name = os.path.splitext(self.file2_path)[0].split('/')[-1]
-            output_path1 = f"{output_path}\\{file1_name}-compare.xlsx"
-            output_path2 = f"{output_path}\\{file2_name}-compare.xlsx"
+            file1_name, file1_ext = os.path.splitext(os.path.basename(self.file1_path))
+            file2_name, file2_ext = os.path.splitext(os.path.basename(self.file2_path))
+            if file1_ext.lower() == '.csv':
+                # CSV文件默认转为XLSX格式
+                file1_ext = '.xlsx'
+            if file2_ext.lower() == '.csv':
+                # CSV文件默认转为XLSX格式
+                file2_ext = '.xlsx'
+            output_path1 = os.path.join(output_path, f"{file1_name}-compare{file1_ext}")
+            output_path2 = os.path.join(output_path, f"{file2_name}-compare{file2_ext}")
 
             # 处理配置数据
             results = []
@@ -394,23 +402,25 @@ class DataProcessor(QThread):
                 wb1.remove(wb1_sheet_copy)
             
             # 保存对比结果
-            compare_compelted_time = time.time()
-            # compare_compelted_time_output = f"完成所有sheet对比任务耗时：{compare_compelted_time}"
+            compare_compeleted_time = time.time()
+            # compare_compeleted_time_output = f"完成所有sheet对比任务耗时：{compare_compeleted_time}"
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             self.progress_updated.emit(90)
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             if self.saving_file(wb1, output_path1):
                 self.progress_current_task.emit("File1保存成功")
+                self.progress_current_task.emit(f"File1:output_path1 = {output_path1}")
             self.progress_updated.emit(95)
             if self.saving_file(wb2, output_path2):
                 self.progress_current_task.emit("File2保存成功")
+                self.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
             self.progress_current_task.emit("成功保存所有文档")
-            saving_compelted_time = time.time()
-            # saving_compelted_time_output = f"保存所有文档耗时：{saving_compelted_time}"
+            saving_compeleted_time = time.time()
+            # saving_compeleted_time_output = f"保存所有文档耗时：{saving_compeleted_time}"
             self.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
-            完成所有sheet对比任务耗时：{compare_compelted_time - self.Thread_start_time}s
-            保存所有文档耗时：{saving_compelted_time - compare_compelted_time}s
+            完成所有sheet对比任务耗时：{compare_compeleted_time - self.Thread_start_time}s
+            保存所有文档耗时：{saving_compeleted_time - compare_compeleted_time}s
             本次任务总耗时：{time.time()-self.Thread_start_time}s
             ======================================
             """))
@@ -466,8 +476,8 @@ class DataProcessor(QThread):
             print(error)
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return 0
-
-    def open_file(self, file_path, read_only_flag = False):
+    @staticmethod
+    def open_file(file_path, read_only_flag = False):
         """打开Excel文件，支持.xls/.xlsx/.xlsm/.csv格式"""
         # 加载一个 Excel 文件
         try:
@@ -484,12 +494,27 @@ class DataProcessor(QThread):
                 del wb['Sheet']  # 删除默认创建的工作表
             elif file_path.lower().endswith('.csv'):
                 df = pd.read_csv(file_path)
-                df.to_excel('data.xlsx', index=False)
-                wb = openpyxl.load_workbook('data.xlsx', read_only=read_only_flag)
-                os.remove('data.xlsx')
-            else:
-                # 处理 .xlsx 和 .xlsm 文件
+                # 直接创建openpyxl工作簿并写入数据（无临时文件）
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                # 写入表头
+                ws.append(df.columns.tolist())
+                # 写入数据行
+                for row in df.itertuples(index=False, name=None):
+                    ws.append(row)
+                    
+                # df = pd.read_csv(file_path)
+                # df.to_excel('data.xlsx', index=False)
+                # wb = openpyxl.load_workbook('data.xlsx', read_only=read_only_flag)
+                # os.remove('data.xlsx')
+            elif file_path.lower().endswith('.xlsx'):
+                # 处理 .xlsx 文件
                 wb = openpyxl.load_workbook(file_path, read_only=read_only_flag)
+            
+            elif file_path.lower().endswith('.xlsm'):
+                # 处理 .xlsm 文件
+                wb = openpyxl.load_workbook(file_path, keep_vba=True, read_only=read_only_flag)
+                
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
             print(error)
@@ -510,11 +535,21 @@ class DataProcessor(QThread):
     def saving_file(self, wb, output_path):
         """保存Excel文件"""
         try:
-            print(f"saving file")
-            self.progress_current_task.emit(f"对比完成，file保存中·····")
-            wb.save(output_path)
-            # self.progress_current_task.emit(f"对比完成，File1保存成功")
-            print(f"file saved")
+            # 根据文件扩展名选择保存方式
+            ext = os.path.splitext(output_path)[1].lower()
+            
+            if ext in ('.xlsx', '.xlsm', '.xls'):
+                # 使用 openpyxl 保存
+                wb.save(output_path)
+            
+            elif ext == '.csv':
+                # 保存为 CSV（适合用 pandas 处理）
+                import pandas as pd
+                df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                df.to_csv(output_path, index=False, header=False)
+            
+            print(f"文件保存成功: {output_path}")
+            return 1
         except Exception as e:
             if isinstance(e, PermissionError):
                 error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
@@ -523,12 +558,23 @@ class DataProcessor(QThread):
             elif isinstance(e, FileNotFoundError):
                 error = f"保存文件时文件路径不存在：{str(e)}"
                 try:
-                    ouput_folder_name = output_path.split("\\")[1]
-                    print(f"ouput_folder_name = {ouput_folder_name}")
-                    os.mkdir(ouput_folder_name)
-                    error = f"文件夹 {ouput_folder_name} 创建成功。"
-                    wb.save(output_path)
-                    print(error)
+                    output_dir = os.path.dirname(output_path)
+                    os.mkdir(output_dir)
+                    error = f"文件夹 {output_dir} 创建成功。"
+                    # 根据文件扩展名选择保存方式
+                    ext = os.path.splitext(output_path)[1].lower()
+                    
+                    if ext in ('.xlsx', '.xlsm', '.xls'):
+                        # 使用 openpyxl 保存
+                        wb.save(output_path)
+                    
+                    elif ext == '.csv':
+                        # 保存为 CSV（适合用 pandas 处理）
+                        import pandas as pd
+                        df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                        df.to_csv(output_path, index=False, header=False)
+                    
+                    print(f"文件保存成功: {output_path}")
                     wb.close()
                     return 1
                 except FileExistsError:
@@ -1037,8 +1083,8 @@ class DataProcessingTool(QMainWindow):
         index = index_list.index(str(self.table_row_number))
         self.table_row_number_combo.setCurrentIndex(index)
         if file1_path and file2_path:
-            wb1 = DataProcessor.open_file(None, file1_path, True)
-            wb2 = DataProcessor.open_file(None, file2_path, True)
+            wb1 = DataProcessor.open_file(file1_path, True)
+            wb2 = DataProcessor.open_file(file2_path, True)
             if wb1 and wb2:
                 self.file1_selector.set_file_path(file1_path)
                 self.file2_selector.set_file_path(file2_path)
@@ -1540,8 +1586,15 @@ class DataProcessingTool(QMainWindow):
     
     def get_file_output_path_byFilepath(self, file_path):
         # 处理文件路径和输出路径
-        file_name = os.path.splitext(file_path)[0].split('/')[-1]
-        outputfile_path = f"{output_path}\\{file_name}-compare.xlsx"
+        file_name, file_ext = os.path.splitext(os.path.basename(file_path))
+        # 处理输出文件扩展名：CSV文件默认转为XLSX，其他格式保留原扩展名
+        if file_ext.lower() == '.csv':
+            output_ext = '.xlsx'
+        else:
+            output_ext = file_ext  # 保留原扩展名（如.xlsx、.xlsm等）
+
+        # 构建完整输出路径
+        outputfile_path = os.path.join(output_path, f"{file_name}-compare{output_ext}")
         return outputfile_path
 
     def browse_file(self, selector):
@@ -1554,20 +1607,26 @@ class DataProcessingTool(QMainWindow):
         )
         
         if file_path:
-            selector.set_file_path(file_path)
-            wb = DataProcessor.open_file(None, file_path, True)
-            print(f"wb.sheetnames = {wb.sheetnames}")
-            if selector == self.file1_selector:
-                self.wb1 = wb
-                self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
-                # 处理文件路径和输出路径
-                self.output_file_path1 = self.get_file_output_path_byFilepath(file_path)
-            elif selector == self.file2_selector:
-                self.wb2 = wb
-                self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 1, self.wb2.sheetnames)
-                self.output_file_path2 = self.get_file_output_path_byFilepath(file_path)
-            else:
-                pass
+            try:
+                selector.set_file_path(file_path)
+                wb = DataProcessor.open_file(file_path, True)
+                print(f"wb.sheetnames = {wb.sheetnames}")
+                if selector == self.file1_selector:
+                    self.wb1 = wb
+                    self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
+                    # 处理文件路径和输出路径
+                    self.output_file_path1 = self.get_file_output_path_byFilepath(file_path)
+                elif selector == self.file2_selector:
+                    self.wb2 = wb
+                    self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 1, self.wb2.sheetnames)
+                    self.output_file_path2 = self.get_file_output_path_byFilepath(file_path)
+                else:
+                    pass
+            except Exception as e:
+                self.current_task_edit.appendPlainText(f"无法打开文件: {file_path}\n{str(e)}")
+                print(f"无法打开文件: {file_path}\n{str(e)}")
+                QMessageBox.warning(self, "错误", f"无法打开文件: {file_path}\n{str(e)}")
+                return 0
         
         self.button_up.setEnabled(0)
         self.button_down.setEnabled(0)
