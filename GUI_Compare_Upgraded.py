@@ -56,7 +56,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
 
-from Person_ComparisonApp_V16 import Person_ComparisonApp
+from Person_ComparisonApp import Person_ComparisonApp
 from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 
