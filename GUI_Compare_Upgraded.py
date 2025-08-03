@@ -35,6 +35,7 @@
 ## 2025/08/02：已解决，第二个文件存在大量空行时，进度条存在的问题，
 ## 2025/08/02：待解决，继续测试json文件异常时的case
 ## 2025/08/03：已解决，读取csv文件时，会将空白格转换为“Nan”，导致对比差异的问题
+## 2025/08/03：已解决，json文件异常时的case测试完成，增加在json中的mapping_status值异常时的处理策略，避免读取json文件时出现异常
 ##
 ## 
 
@@ -430,8 +431,9 @@ class DataProcessor(QThread):
                 self.progress_current_task.emit("File2保存成功")
                 self.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
             self.progress_current_task.emit("成功保存所有文档")
+            wb1.close()
+            wb2.close()
             saving_compeleted_time = time.time()
-            # saving_compeleted_time_output = f"保存所有文档耗时：{saving_compeleted_time}"
             self.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
             完成所有sheet对比任务耗时：{compare_compeleted_time - self.Thread_start_time}s
@@ -519,6 +521,7 @@ class DataProcessor(QThread):
                                 keep_default_na=False,  # 关键：不将空白格解析为NaN
                                 na_values=[]  # 额外确保不将任何值识别为NaN（可选）
                             )
+                            df = df.fillna("")
                             print(f"成功读取文件，使用编码: {encoding}")
                             break
                         except UnicodeDecodeError:
@@ -605,7 +608,6 @@ class DataProcessor(QThread):
                         df.to_csv(output_path, index=False, header=False)
                     
                     print(f"文件保存成功: {output_path}")
-                    wb.close()
                     return 1
                 except FileExistsError:
                     error = f"文件夹 {output_path} 已经存在。"
@@ -616,10 +618,7 @@ class DataProcessor(QThread):
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             self.progress_current_task.emit(f"{error}")
-            wb.close()
             raise ValueError(error)
-        wb.close()
-        return 1
     
 class DataProcessingTool(QMainWindow):
     """主应用程序窗口"""
@@ -1186,6 +1185,15 @@ class DataProcessingTool(QMainWindow):
                     sheet_combo.clear()
                     sheet_combo.addItems([""] + self.wb2.sheetnames)
                     sheet_combo.setCurrentIndex(index2)
+                            
+                    # 设置映射状态
+                    mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
+                    if mapping_status not in ["Y", "N"]:
+                        mapping_status_combo.setCurrentText("N")
+                        print(f"未知映射状态mapping_status: {mapping_status}")
+                        mapping_status_combo.setCurrentText("N")  # 默认设置为N
+                        continue  # 跳过当前循环
+                    mapping_status_combo.setCurrentText(mapping_status)
                     
                     # 处理映射配置
                     if sheet1_name and sheet2_name:
@@ -1200,20 +1208,18 @@ class DataProcessingTool(QMainWindow):
                             except ValueError:
                                 index = 0  # 未找到匹配项时设置为0
                             
-                            # 设置映射状态
-                            mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
-                            mapping_status_combo.setCurrentText(mapping_status)
-                            
                             # 根据映射状态设置其他控件
                             if mapping_status_combo.currentText() == "Y":
                                 mapping_row_combo = self.Compare_Config_table.cellWidget(row, self.title_rows)
                                 mapping_row_combo.setValue(title_row_number)
                                 index_combo = self.Compare_Config_table.cellWidget(row, col)
                                 index_combo.setCurrentIndex(index)
-                            else:
+                            elif mapping_status_combo.currentText() == "N":
                                 index_combo = self.Compare_Config_table.cellWidget(row, col)
                                 index_combo.clear()
                                 index_combo.setText(index_column_list[col-2] or "")
+                            else:
+                                return (0, f"未知映射状态: {mapping_status}")
                 except Exception as e:
                     return (0, f"处理第{row}行配置时出错: {str(e)}")
             
