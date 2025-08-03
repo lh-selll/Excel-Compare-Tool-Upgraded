@@ -34,6 +34,7 @@
 ## 2025/08/02：待解决，第二个文件存在大量空行时，进度条存在问题，会从48%直接调至100%，继续测试json文件异常时的case
 ## 2025/08/02：已解决，第二个文件存在大量空行时，进度条存在的问题，
 ## 2025/08/02：待解决，继续测试json文件异常时的case
+## 2025/08/03：已解决，读取csv文件时，会将空白格转换为“Nan”，导致对比差异的问题
 ##
 ## 
 
@@ -512,7 +513,12 @@ class DataProcessor(QThread):
                     encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig', 'gb18030']
                     for encoding in encodings:
                         try:
-                            df = pd.read_csv(file_path, encoding=encoding)
+                            df = pd.read_csv(
+                                file_path,
+                                encoding=encoding,
+                                keep_default_na=False,  # 关键：不将空白格解析为NaN
+                                na_values=[]  # 额外确保不将任何值识别为NaN（可选）
+                            )
                             print(f"成功读取文件，使用编码: {encoding}")
                             break
                         except UnicodeDecodeError:
@@ -533,11 +539,11 @@ class DataProcessor(QThread):
                     ws.append(row)
             elif file_path.lower().endswith('.xlsx'):
                 # 处理 .xlsx 文件
-                wb = openpyxl.load_workbook(file_path, read_only=read_only_flag)
+                wb = openpyxl.load_workbook(file_path, read_only=read_only_flag, data_only=True)
             
             elif file_path.lower().endswith('.xlsm'):
                 # 处理 .xlsm 文件
-                wb = openpyxl.load_workbook(file_path, keep_vba=True, read_only=read_only_flag)
+                wb = openpyxl.load_workbook(file_path, keep_vba=True, read_only=read_only_flag, data_only=True)
                 
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
