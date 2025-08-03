@@ -13,6 +13,7 @@
 ## 待办：确认mapping row和mapping col的性能优化效果，继续优化大文件的对比速度
 ## 2025/07/08：修复索引列空白时，报“用户手动终止进程”的问题
 ## 2025/07/29：V16,对比结果框中添加"对比结果摘要"，同时将摘要放入对比结果log文件中，以快速浏览对比结果
+## 2025/07/29：V17, 添加delete_bottom_blank_rows方法，解决底部大量空白行导致的进度跳变问题
 ##
 
 
@@ -1195,3 +1196,28 @@ class Person_ComparisonApp:
             return 1
         else:
             return 0
+    @staticmethod
+    def delete_bottom_blank_rows(sheet):
+        """
+        删除工作表底部的空白行
+        返回值：1表示成功，0表示失败
+        """
+        try:
+            last_valid_row = 0
+            
+            # 找到当前工作表最后一个包含有效数据的行
+            for row in sheet.iter_rows():
+                if any(cell.value is not None and str(cell.value).strip() != "" for cell in row):
+                    last_valid_row = row[0].row  # 更新最后有效行号
+            
+            # 删除底部空行
+            if last_valid_row > 0 and last_valid_row < sheet.max_row:
+                delete_count = sheet.max_row - last_valid_row
+                sheet.delete_rows(last_valid_row + 1, delete_count)
+                print(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+            else:
+                print(f"工作表 '{sheet.title}' 无底部空行需要删除")
+            return 1, None
+        except Exception as e:
+            print(f"Error: {e}") 
+            return 0, e

@@ -30,6 +30,10 @@
 ## 2025/07/30：V16,增加三个按钮，分别可以快速打开对比结果excel文件，以及对比结果log文件
 ## 2025/07/30：V16,解决处理CSV文件时的问题
 ## 2025/07/31：待解决，直接对比时，底部空白行对比有差异
+## 2025/08/02：已解决，打开CSV文件时格式报错问题
+## 2025/08/02：待解决，第二个文件存在大量空行时，进度条存在问题，会从48%直接调至100%，继续测试json文件异常时的case
+## 2025/08/02：已解决，第二个文件存在大量空行时，进度条存在的问题，
+## 2025/08/02：待解决，继续测试json文件异常时的case
 ##
 ## 
 
@@ -281,8 +285,12 @@ class DataProcessor(QThread):
         try:
             self.progress_updated.emit(0)
             print(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
-            wb1 = self.open_file(self.file1_path)   # 打开文件1
-            wb2 = self.open_file(self.file2_path)   # 打开文件2
+            wb1, error_msg = self.open_file(self.file1_path)   # 打开文件1
+            if not wb1:
+                raise ValueError(f"打开文件1失败: {error_msg}")
+            wb2, error_msg = self.open_file(self.file2_path)   # 打开文件2
+            if not wb2:
+                raise ValueError(f"打开文件2失败: {error_msg}")
             
             # 处理文件路径和输出路径
             file1_name, file1_ext = os.path.splitext(os.path.basename(self.file1_path))
@@ -358,7 +366,13 @@ class DataProcessor(QThread):
             compare_result_info = ""
             for row_data in results_data:
                 wb1_sheet = wb1[row_data.sheet1_name]
+                status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
+                if not status:
+                    raise ValueError(f"删除{row_data.sheet1_name}底行失败: {error_msg}")
                 wb2_sheet = wb2[row_data.sheet2_name]
+                status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb2_sheet)
+                if not status:
+                    raise ValueError(f"删除{row_data.sheet2_name}底行失败: {error_msg}")
                 # 更新当前进度
                 wb1_sheet_copy = wb1.copy_worksheet(wb1_sheet)
                 if not row_data.mapping and len(row_data.col) == 0:
@@ -493,7 +507,22 @@ class DataProcessor(QThread):
                             new_sheet.cell(row=row + 1, column=col + 1).value = xls_sheet.cell_value(row, col)
                 del wb['Sheet']  # 删除默认创建的工作表
             elif file_path.lower().endswith('.csv'):
-                df = pd.read_csv(file_path)
+                try:
+                    # 尝试常见编码格式
+                    encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig', 'gb18030']
+                    for encoding in encodings:
+                        try:
+                            df = pd.read_csv(file_path, encoding=encoding)
+                            print(f"成功读取文件，使用编码: {encoding}")
+                            break
+                        except UnicodeDecodeError:
+                            if encoding == encodings[-1]:
+                                return None, "无法识别文件编码，请检查文件格式"
+                            else:
+                                continue
+                
+                except Exception as e:
+                    return None, f"读取文件出错: {str(e)}"
                 # 直接创建openpyxl工作簿并写入数据（无临时文件）
                 wb = openpyxl.Workbook()
                 ws = wb.active
@@ -502,11 +531,6 @@ class DataProcessor(QThread):
                 # 写入数据行
                 for row in df.itertuples(index=False, name=None):
                     ws.append(row)
-                    
-                # df = pd.read_csv(file_path)
-                # df.to_excel('data.xlsx', index=False)
-                # wb = openpyxl.load_workbook('data.xlsx', read_only=read_only_flag)
-                # os.remove('data.xlsx')
             elif file_path.lower().endswith('.xlsx'):
                 # 处理 .xlsx 文件
                 wb = openpyxl.load_workbook(file_path, read_only=read_only_flag)
@@ -519,18 +543,18 @@ class DataProcessor(QThread):
             error = f"文件 {file_path} 不存在。"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
+            return (None, error)
         except openpyxl.utils.exceptions.InvalidFileException:
             error = f"文件 {file_path} 不是有效的 Excel 文件, 请重新输入"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
+            return (None, error)
         except Exception as e:
             error = f"发生了未知错误：{e}"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
-        return wb
+            return (None, error)
+        return (wb, None)
 
     def saving_file(self, wb, output_path):
         """保存Excel文件"""
@@ -1060,7 +1084,6 @@ class DataProcessingTool(QMainWindow):
         # 在底部添加弹簧，但权重较小，允许窗口缩小
         main_layout.addStretch(0.1)
         
-        
         # 连接文件选择信号
         self.file1_selector.path_edit.textChanged.connect(self.check_files_selected)
         self.file2_selector.path_edit.textChanged.connect(self.check_files_selected)
@@ -1068,90 +1091,133 @@ class DataProcessingTool(QMainWindow):
         self.restored_config_data = restored_config_data_Container(15)
         if not self.restored_config_data.load_from_file(json_file_path):
             self.restored_config_data.update_row_number(self.table_row_number)
-        self.restore_current_data(self.restored_config_data) #加载历史数据
+            if os.path.exists(json_file_path):
+                os.remove(json_file_path)  # 删除文件
+                print(f"文件 {json_file_path} 已成功删除")
+        else:
+            restored_result, error_msg = self.restore_current_data(self.restored_config_data) #加载历史数据
+            if not restored_result:
+                self.current_task_edit.appendPlainText(f"配置文件有误，已清空配置：\n原因:{error_msg}")
+                if os.path.exists(json_file_path):
+                    os.remove(json_file_path)  # 删除文件
+                    print(f"文件 {json_file_path} 已成功删除")
+            else:
+                self.current_task_edit.appendPlainText(f"初始化完成，恢复历史配置")
+
         delta_time = time.time() - system_start_time
         print(f"启动时间 = {delta_time}s")
         self.current_task_edit.appendPlainText(f"启动时间 = {delta_time}s")
 
     def restore_current_data(self, restored_data):
         """恢复历史配置数据"""
-        print(f"func: restore_current_data, restored_data = {restored_data}")
-        file1_path = restored_data.file1_path
-        file2_path = restored_data.file2_path
-        self.table_row_number = restored_data.row_number
-        index_list = self.get_combo_all_options(self.table_row_number_combo)
-        index = index_list.index(str(self.table_row_number))
-        self.table_row_number_combo.setCurrentIndex(index)
-        if file1_path and file2_path:
-            wb1 = DataProcessor.open_file(file1_path, True)
-            wb2 = DataProcessor.open_file(file2_path, True)
-            if wb1 and wb2:
-                self.file1_selector.set_file_path(file1_path)
-                self.file2_selector.set_file_path(file2_path)
-                self.output_file_path1 = self.get_file_output_path_byFilepath(file1_path)
-                self.output_file_path2 = self.get_file_output_path_byFilepath(file2_path)
-                print(f"wb.sheetnames = {wb1.sheetnames}")
-                print(f"wb.sheetnames = {wb2.sheetnames}")
-                self.wb1 = wb1
-                self.wb2 = wb2
-            else:
-                return 0
-        else:
-            print(f"restored_data.file1_path = {restored_data.file1_path}\nrestored_data.file2_path = {restored_data.file2_path}")
-            return 0
-        for row in range(0, self.table_row_number):
-            print(f"restored_data = {restored_data}")
-            sheet1_name = restored_data.config_data[row][0]
-            sheet2_name = restored_data.config_data[row][1]
-            mapping_status = restored_data.config_data[row][self.mapping_option]
-            index_column_list = restored_data.config_data[row][self.index_col_position[0]: self.index_col_position[1]+1]
-            title_row_number = restored_data.config_data[row][self.title_rows]
-            print(f"self.wb1.sheetnames = {self.wb1.sheetnames} sheet1_name = {sheet1_name}")
-            print(f"self.wb2.sheetnames = {self.wb2.sheetnames} sheet2_name = {sheet2_name}")
-            try:
-                index1 = list(self.wb1.sheetnames).index(sheet1_name)+1
-                index2 = list(self.wb2.sheetnames).index(sheet2_name)+1
-            except ValueError:
-                index1 = 0
-                index2 = 0
-            # workboot2的sheet name list填充到table的第一列
-            sheet_combo = self.Compare_Config_table.cellWidget(row, 0)
-            sheet_combo.clear()
-            sheet_combo.addItems([""] + self.wb1.sheetnames)
-            sheet_combo.setCurrentIndex(index1)
-
-            # workboot2的sheet name list填充到table的第二列
-            sheet_combo = self.Compare_Config_table.cellWidget(row, 1)
-            sheet_combo.clear()
-            sheet_combo.addItems([""] + self.wb2.sheetnames)
-            sheet_combo.setCurrentIndex(index2)
-
-            if sheet1_name and sheet2_name:
-                sheet1 = self.wb1[sheet1_name]
-                sheet2 = self.wb2[sheet2_name]
-                title_list = self.get_title_list(sheet1, sheet2, title_row_number)
-                for col in range(self.index_col_position[0], self.index_col_position[1]+1):
-                    try:
-                        index = title_list.index(index_column_list[col-2])+1
-                    except ValueError:
-                        # 未找到匹配项的处理
-                        index = 0
-                    mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
-                    mapping_status_combo.setCurrentText(mapping_status)
-                    if mapping_status_combo.currentText() == "Y":
-                        mapping_row_combo = self.Compare_Config_table.cellWidget(row, self.title_rows)
-                        mapping_row_combo.setValue(title_row_number)
-                        index_combo = self.Compare_Config_table.cellWidget(row, col)
-                        index_combo.setCurrentIndex(index)
-                    else:
-                        index_combo = self.Compare_Config_table.cellWidget(row, col)
-                        index_combo.clear()
-                        index_combo.setText(index_column_list[col-2])
-
+        try:
+            print(f"func: restore_current_data, restored_data = {restored_data}")
+            file1_path = restored_data.file1_path
+            file2_path = restored_data.file2_path
+            self.table_row_number = restored_data.row_number
             
-        print(f"当前行数为：{inspect.currentframe().f_lineno}， restore_current_data成功")
-        
-        return 1
+            # 获取下拉框选项并设置索引
+            index_list = self.get_combo_all_options(self.table_row_number_combo)
+            try:
+                index = index_list.index(str(self.table_row_number))
+            except ValueError:
+                return (0, f"找不到与行数 {self.table_row_number} 匹配的下拉选项")
+            self.table_row_number_combo.setCurrentIndex(index)
+            
+            # 检查文件路径是否存在
+            if not (file1_path and file2_path):
+                error_msg = f"文件路径不完整: file1={file1_path}, file2={file2_path}"
+                print(error_msg)
+                return (0, error_msg)
+            
+            # 打开第一个文件
+            wb1, error_msg = DataProcessor.open_file(file1_path, True)
+            if not wb1:
+                return (0, f"打开文件1失败: {error_msg}")
+            
+            # 打开第二个文件
+            wb2, error_msg = DataProcessor.open_file(file2_path, True)
+            if not wb2:
+                return (0, f"打开文件2失败: {error_msg}")
+            
+            # 设置文件路径和工作簿
+            self.file1_selector.set_file_path(file1_path)
+            self.file2_selector.set_file_path(file2_path)
+            self.output_file_path1 = self.get_file_output_path_byFilepath(file1_path)
+            self.output_file_path2 = self.get_file_output_path_byFilepath(file2_path)
+            self.wb1 = wb1
+            self.wb2 = wb2
+            print(f"wb1.sheetnames = {wb1.sheetnames}")
+            print(f"wb2.sheetnames = {wb2.sheetnames}")
+            
+            # 处理表格配置数据
+            for row in range(0, self.table_row_number):
+                try:
+                    # 提取配置数据
+                    sheet1_name = restored_data.config_data[row][0]
+                    sheet2_name = restored_data.config_data[row][1]
+                    mapping_status = restored_data.config_data[row][self.mapping_option]
+                    index_column_list = restored_data.config_data[row][self.index_col_position[0]: self.index_col_position[1]+1]
+                    title_row_number = restored_data.config_data[row][self.title_rows]
+                    
+                    print(f"sheet1_name = {sheet1_name}, sheet2_name = {sheet2_name}")
+                    
+                    # 获取工作表索引
+                    try:
+                        index1 = list(self.wb1.sheetnames).index(sheet1_name) + 1 if sheet1_name else 0
+                        index2 = list(self.wb2.sheetnames).index(sheet2_name) + 1 if sheet2_name else 0
+                    except ValueError:
+                        return (0, f"工作表不存在: sheet1={sheet1_name}, sheet2={sheet2_name}")
+                    
+                    # 设置第一个工作表下拉框
+                    sheet_combo = self.Compare_Config_table.cellWidget(row, 0)
+                    sheet_combo.clear()
+                    sheet_combo.addItems([""] + self.wb1.sheetnames)
+                    sheet_combo.setCurrentIndex(index1)
+                    
+                    # 设置第二个工作表下拉框
+                    sheet_combo = self.Compare_Config_table.cellWidget(row, 1)
+                    sheet_combo.clear()
+                    sheet_combo.addItems([""] + self.wb2.sheetnames)
+                    sheet_combo.setCurrentIndex(index2)
+                    
+                    # 处理映射配置
+                    if sheet1_name and sheet2_name:
+                        sheet1 = self.wb1[sheet1_name]
+                        sheet2 = self.wb2[sheet2_name]
+                        title_list = self.get_title_list(sheet1, sheet2, title_row_number)
+                        
+                        # 处理索引列配置
+                        for col in range(self.index_col_position[0], self.index_col_position[1]+1):
+                            try:
+                                index = title_list.index(index_column_list[col-2]) + 1 if index_column_list[col-2] else 0
+                            except ValueError:
+                                index = 0  # 未找到匹配项时设置为0
+                            
+                            # 设置映射状态
+                            mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
+                            mapping_status_combo.setCurrentText(mapping_status)
+                            
+                            # 根据映射状态设置其他控件
+                            if mapping_status_combo.currentText() == "Y":
+                                mapping_row_combo = self.Compare_Config_table.cellWidget(row, self.title_rows)
+                                mapping_row_combo.setValue(title_row_number)
+                                index_combo = self.Compare_Config_table.cellWidget(row, col)
+                                index_combo.setCurrentIndex(index)
+                            else:
+                                index_combo = self.Compare_Config_table.cellWidget(row, col)
+                                index_combo.clear()
+                                index_combo.setText(index_column_list[col-2] or "")
+                except Exception as e:
+                    return (0, f"处理第{row}行配置时出错: {str(e)}")
+            
+            print(f"当前行数为：{inspect.currentframe().f_lineno}，restore_current_data成功")
+            return (1, "数据恢复成功")
+    
+        except Exception as e:
+            error_msg = f"恢复数据失败: {str(e)}"
+            print(error_msg)
+            return (0, error_msg)
 
     def One_click_clear(self):
         """一键清空配置"""
@@ -1609,7 +1675,12 @@ class DataProcessingTool(QMainWindow):
         if file_path:
             try:
                 selector.set_file_path(file_path)
-                wb = DataProcessor.open_file(file_path, True)
+                wb, error_msg = DataProcessor.open_file(file_path, True)
+                print("ValueError(error_msg)1")
+                if wb is None:
+                    ValueError(error_msg)
+                    print("ValueError(error_msg)2")
+                print("ValueError(error_msg)3")
                 print(f"wb.sheetnames = {wb.sheetnames}")
                 if selector == self.file1_selector:
                     self.wb1 = wb
