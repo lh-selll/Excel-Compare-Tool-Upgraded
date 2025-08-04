@@ -635,7 +635,7 @@ class DataProcessingTool(QMainWindow):
         self.title_rows = 6                     #title列所在的列数（从0开始）
         self.table_row_height = 32              # 表格行高
         self.table_heigh = self.table_row_number * self.table_row_height+50  # table的高度
-        self.current_task_label_heigh = 130     #当前任务展示框的高度
+        self.current_task_label_height = 130     #当前任务展示框的高度
         self.select_edit_heigh = 15             #index列选项框的高度
         self.progress_bar_heigh = 35            #进度条和开始按钮的高度
         self.path_edit_height = 23              #文件选项框的高度
@@ -713,6 +713,7 @@ class DataProcessingTool(QMainWindow):
 
         self.clear_button.clicked.connect(self.One_click_clear)
         self.clear_button.setFixedHeight(30)
+        self.clear_button.setMinimumWidth(800)
         clear_button_layout.addWidget(self.clear_button)
 
         # 文件选择区域
@@ -775,7 +776,7 @@ class DataProcessingTool(QMainWindow):
         tab_combo_layout.setAlignment(Qt.AlignTop)
         
         # 进度和按钮区域
-        bottom_layout = QHBoxLayout()
+        progress_bar_layout = QHBoxLayout()
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
 
@@ -842,9 +843,9 @@ class DataProcessingTool(QMainWindow):
         """)
         self.start_btn.setMinimumHeight(self.progress_bar_heigh)
         self.start_btn.setMaximumHeight(self.progress_bar_heigh)
-        bottom_layout.addWidget(self.progress_bar, 4)
-        bottom_layout.addWidget(self.start_btn, 1)
-        bottom_layout.setAlignment(Qt.AlignTop)
+        progress_bar_layout.addWidget(self.progress_bar, 4)
+        progress_bar_layout.addWidget(self.start_btn, 1)
+        progress_bar_layout.setAlignment(Qt.AlignTop)
 
         # 当前Task框
         current_task_layout = QHBoxLayout()
@@ -860,7 +861,7 @@ class DataProcessingTool(QMainWindow):
             }
         """)
         self.current_task_edit = QPlainTextEdit ()
-        self.current_task_edit.setFixedHeight(self.current_task_label_heigh)
+        self.current_task_edit.setMinimumHeight(self.current_task_label_height)
         self.current_task_edit.setStyleSheet("""
             QPlainTextEdit {
                 background-color: #FFFFFF;
@@ -945,8 +946,7 @@ class DataProcessingTool(QMainWindow):
                 border-color: #E0E0E0;
             }
         """)
-        self.button_up.setMinimumHeight(self.current_task_label_heigh/2-4)
-        self.button_up.setMaximumHeight(self.current_task_label_heigh/2-4)
+        self.button_up.setMinimumHeight(self.current_task_label_height/2-4)
         self.button_up.clicked.connect(lambda: self.open_result_file(0))
         self.button_up.setEnabled(0)
         # 创建下方按钮
@@ -981,10 +981,19 @@ class DataProcessingTool(QMainWindow):
                 border-color: #E0E0E0;
             }
         """)
-        self.button_down.setMinimumHeight(self.current_task_label_heigh/2-4)
-        self.button_down.setMaximumHeight(self.current_task_label_heigh/2-4)
+        self.button_down.setMinimumHeight(self.current_task_label_height/2-4)
         self.button_down.clicked.connect(lambda: self.open_result_file(1))
         self.button_down.setEnabled(0)
+        # 设置按钮在水平和垂直方向都可拉伸
+        self.button_up.setSizePolicy(
+            QSizePolicy.Preferred,  # 水平方向：尽可能填充可用空间
+            QSizePolicy.Expanding   # 垂直方向：尽可能填充可用空间
+        )
+        self.button_down.setSizePolicy(
+            QSizePolicy.Preferred,  # 水平方向：尽可能填充可用空间
+            QSizePolicy.Expanding   # 垂直方向：尽可能填充可用空间
+        )
+        button_layout.setAlignment(Qt.AlignTop)
         current_task_layout.addLayout(button_layout)
 
         # 结果区域框
@@ -1036,7 +1045,7 @@ class DataProcessingTool(QMainWindow):
                 background: none;
             }
         """)
-        self.result_text_edit.setFixedHeight(self.current_task_label_heigh-40)
+        self.result_text_edit.setMinimumHeight(self.current_task_label_height-40)
         self.result_text_edit.setReadOnly(True)
         self.button_log = QPushButton("result.log")
         self.button_log.setStyleSheet("""
@@ -1068,10 +1077,14 @@ class DataProcessingTool(QMainWindow):
                 border-color: #E0E0E0;
             }
         """)
-        self.button_log.setMinimumHeight(self.current_task_label_heigh-50)
-        self.button_log.setMaximumHeight(self.current_task_label_heigh-50)
+        self.button_log.setMinimumHeight(self.current_task_label_height-50)
         self.button_log.clicked.connect(self.open_log_file)
         self.button_log.setEnabled(0)
+        # 设置按钮在水平和垂直方向都可拉伸
+        self.button_log.setSizePolicy(
+            QSizePolicy.Preferred,  # 水平方向：尽可能填充可用空间
+            QSizePolicy.Expanding   # 垂直方向：尽可能填充可用空间
+        )
         result_layout.addWidget(self.result_text_edit)
         result_layout.addWidget(self.button_log)
         
@@ -1079,15 +1092,15 @@ class DataProcessingTool(QMainWindow):
         main_layout.addLayout(clear_button_layout)
         main_layout.addLayout(file_layout)
         main_layout.addLayout(self.table_row_number_layout)
-        main_layout.addWidget(self.tab_widget, 1, alignment=Qt.AlignTop)
-        main_layout.addLayout(bottom_layout)
+        main_layout.addWidget(self.tab_widget, alignment=Qt.AlignTop)
+        main_layout.addLayout(progress_bar_layout)
         main_layout.addLayout(current_task_label_layout)
         main_layout.addLayout(current_task_layout)
         main_layout.addLayout(result_layout)
-        main_layout.setAlignment(bottom_layout, Qt.AlignTop)
+        main_layout.setAlignment(progress_bar_layout, Qt.AlignTop)
         main_layout.setAlignment(Qt.AlignTop)
         # 在底部添加弹簧，但权重较小，允许窗口缩小
-        main_layout.addStretch(0.1)
+        main_layout.addStretch(0.01)
         
         # 连接文件选择信号
         self.file1_selector.path_edit.textChanged.connect(self.check_files_selected)
@@ -1503,7 +1516,7 @@ class DataProcessingTool(QMainWindow):
         if self.file2_selector.get_file_path():
             self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 1, self.wb2.sheetnames)
         # self.restored_config_data.update_row_number(self.table_row_number)
-        whole_size = self.path_edit_height*2+self.table_heigh+self.select_edit_heigh+20+self.progress_bar_heigh+self.current_task_label_heigh
+        whole_size = self.path_edit_height*2+self.table_heigh+self.select_edit_heigh+20+self.progress_bar_heigh+self.current_task_label_height
         self.on_tab_widget_resize(whole_size)
         self.button_up.setEnabled(0)
         self.button_down.setEnabled(0)
