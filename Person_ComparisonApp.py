@@ -1196,27 +1196,35 @@ class Person_ComparisonApp:
             return 1
         else:
             return 0
-    @staticmethod
-    def delete_bottom_blank_rows(sheet):
+        
+    def delete_bottom_blank_rows(self, sheet):
         """
         删除工作表底部的空白行
         返回值：1表示成功，0表示失败
         """
         try:
             last_valid_row = 0
-            
-            # 找到当前工作表最后一个包含有效数据的行
-            for row in sheet.iter_rows():
+                    
+            all_rows = list(sheet.iter_rows())  # 一次性获取所有行（仅创建一次迭代器）
+            for row in reversed(all_rows):  # 从最后一行开始反向遍历
+                # 检查任务是否被终止
+                if self.check_thread_running():
+                    return 0, "用户终止对比进程"
+                
+                # 检查当前行是否有有效数据
                 if any(cell.value is not None and str(cell.value).strip() != "" for cell in row):
-                    last_valid_row = row[0].row  # 更新最后有效行号
-            
+                    last_valid_row = row[0].row
+                    break  # 找到最后一个有效行，立即退出（无需继续遍历）
+
             # 删除底部空行
             if last_valid_row > 0 and last_valid_row < sheet.max_row:
                 delete_count = sheet.max_row - last_valid_row
                 sheet.delete_rows(last_valid_row + 1, delete_count)
                 print(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+                self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
             else:
                 print(f"工作表 '{sheet.title}' 无底部空行需要删除")
+                self.progress_current_task.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
             return 1, None
         except Exception as e:
             print(f"Error: {e}") 
