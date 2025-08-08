@@ -15,30 +15,20 @@
 ## 2025/07/29：V16,对比结果框中添加"对比结果摘要"，同时将摘要放入对比结果log文件中，以快速浏览对比结果
 ## 2025/07/29：V17, 添加delete_bottom_blank_rows方法，解决底部大量空白行导致的进度跳变问题
 ##
-
-
+import sys
 import inspect
-import copy
-import json
 import ctypes
 import time
-import threading
 import openpyxl, xlrd
 import textwrap
 from collections import Counter
 from typing import List, Dict, Set, Tuple, Optional, Union
 from collections import defaultdict
-import sys
 import os
 import pandas as pd
 from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QTableWidget, QTableWidgetItem, QComboBox, QLineEdit, QPushButton, QLabel,
-    QFileDialog, QMessageBox, QProgressBar, QHeaderView, QSpinBox, QCompleter,
-)
-from PySide6.QtCore import Qt, QThread, Signal, QStringListModel
-from PySide6.QtGui import QColor, QFont, QValidator
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 
 class Person_ComparisonApp:
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
@@ -62,7 +52,7 @@ class Person_ComparisonApp:
         self.Not_Agreed_color = "C04255"  # 不一致时填充色（红色）
         self.No_match_color = "00FFFF"  # 未匹配时填充色（青色）
         self.None_color = "FFFFFF"  # 空值填充色（白色）
-        self.Delete_color = "1F1F1F"  # 删除行填充色（灰色）
+        self.Delete_color = "696969"  # 删除行填充色（灰色）
         self.update_frequency = 20  # 状态更新频率，防止UI卡顿
         self.result_info = None     #用于保存本次对比结果
 
@@ -92,7 +82,7 @@ class Person_ComparisonApp:
         for row_num in range(title_row_number+1, max_row + 1):
             # 检查任务是否被终止
             if self.check_thread_running():
-                return 0
+                return 0, None
                 
             # 获取当前行的合并文本
             merged_text = self.get_merged_text(sheet, row_num, index_columns)
@@ -218,10 +208,10 @@ class Person_ComparisonApp:
             sheet.unmerge_cells(start_row=row_min, start_column=col_min, end_row=row_max, end_column=col_max)
             for row1 in range(row_min, row_max+1):
                 if self.check_thread_running():
-                    return 0
+                    return 0, None
                 for col1 in range(col_min, col_max+1):
                     if self.check_thread_running():
-                        return 0
+                        return 0, None
                     # print(f"当前行数为：{inspect.currentframe().f_lineno} row = {row1}")
                     if not(row1 == row_min and col1 == col_min):
                         # 计算相对位置
@@ -265,17 +255,17 @@ class Person_ComparisonApp:
             error = f"文件 {file_path} 不存在。"
             print(error)
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
+            return 0, None
         except openpyxl.utils.exceptions.InvalidFileException:
             error = f"文件 {file_path} 不是有效的 Excel 文件, 请重新输入"
             print(error)
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
+            return 0, None
         except Exception as e:
             error = f"发生了未知错误：{e}"
             print(error)
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return 0
+            return 0, None
         return wb
     
     def cell_consistency_check(self, sheet1_cell, sheet2_cell):
@@ -324,7 +314,37 @@ class Person_ComparisonApp:
         """清除工作表中的所有条件格式"""
         sheet.conditional_formatting = []
         return sheet
-
+    
+    def add_conditional_formatting(self, cell1, cell2, fill_color):
+        '''
+        为两个单元格添加条件格式
+        Args:
+            cell1: 第一个单元格
+            cell2: 第二个单元格
+            fill_color: 填充颜色
+        '''
+        cell1.fill = PatternFill(
+            start_color = fill_color, 
+            end_color   = fill_color, 
+            fill_type="solid"
+        )
+        if fill_color == self.Not_Agreed_color: # 不一致颜色
+            # 处理空值
+            value1 = cell1.value or ""
+            value2 = cell2.value or ""
+            
+            """通过底层属性设置删除线，兼容更多版本"""
+            # 创建InlineFont对象（不直接传strikethrough参数）
+            strikethrough_font = InlineFont()
+            # 直接设置底层属性（绕过构造函数参数限制）
+            strikethrough_font.strikethrough = True  # 关键：通过属性赋值
+            # 构建富文本
+            rich_text = CellRichText()
+            rich_text.append(str(value1))
+            rich_text.append("\n⬆ ⬆ ⬆\n")
+            rich_text.append(TextBlock(strikethrough_font, str(value2)))
+            cell1.value = rich_text
+            
     def compare_excel_sheet(
         self, 
         sheet1, 
@@ -362,9 +382,9 @@ class Person_ComparisonApp:
         # 合并单元格处理
         self.progress_current_task.emit(f"正在拆分sheet【{sheet1.title}】的合并单元格")
         if not self.split_merged_cells(sheet1):
-            return 0
+            return 0, None
         if not self.split_merged_cells(sheet2):
-            return 0
+            return 0, None
         
         # 对比参数初始化
         blank_row_flag = 0
@@ -373,7 +393,7 @@ class Person_ComparisonApp:
             # 进度更新
             progress_percent += step_progress
             if self.check_thread_running():
-                return 0
+                return 0, None
                 
             # 定期更新进度，避免UI卡顿
             if row1 % self.update_frequency == 0:
@@ -389,18 +409,14 @@ class Person_ComparisonApp:
             # 逐列对比
             for col in range(1, max_col1 + 1):
                 if self.check_thread_running():
-                    return 0
+                    return 0, None
                     
                 sheet1_cell = sheet1.cell(row=row1, column=col)
                 sheet2_cell = sheet2.cell(row=row1, column=col)
                 
                 # 单元格一致性检查
                 if self.cell_consistency_check(sheet1_cell, sheet2_cell):
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Agreed_color, 
-                        end_color=self.Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Agreed_color)
                     
                     # 空值处理
                     value1 = sheet1_cell.value or ""
@@ -412,11 +428,7 @@ class Person_ComparisonApp:
                         all_cells_empty = False
                 else:
                     row_isChanged_status_flag = True
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Not_Agreed_color, 
-                        end_color=self.Not_Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Not_Agreed_color)
                     all_cells_empty = False
             if row_isChanged_status_flag:
                 row_changed_list[row1] = 2  #表征本行是否变更的flag，2：对比不一致，红色
@@ -495,9 +507,9 @@ class Person_ComparisonApp:
         # --------------------- 索引列检查 --------------------- #
         self.progress_current_task.emit(f"正在检查sheet【{sheet1.title}】索引列重复值")
         if self.check_index_repeat(sheet1, index_value_list) == 0:
-            return 0
+            return 0, None
         if self.check_index_repeat(sheet2, index_value_list) == 0:
-            return 0
+            return 0, None
         
         check_index_time = time.time()
         check_index_time_output = f"索引检查耗时: {check_index_time - start_time}s"
@@ -506,9 +518,9 @@ class Person_ComparisonApp:
         # --------------------- 合并单元格处理 --------------------- #
         self.progress_current_task.emit(f"正在拆分sheet【{sheet1.title}】合并单元格")
         if not self.split_merged_cells(sheet1, index_value_list):
-            return 0
+            return 0, None
         if not self.split_merged_cells(sheet2, index_value_list):
-            return 0
+            return 0, None
         
         split_time = time.time()
         split_time_output = f"合并单元格拆分处理耗时: {split_time - check_index_time}s"
@@ -523,7 +535,7 @@ class Person_ComparisonApp:
             index_value_list
         )
         if index_column_mapping == 0:
-            return 0
+            return 0, None
         
         step_progress = delta_progress / len(index_column_mapping) if len(index_column_mapping) > 0 else 0
 
@@ -539,7 +551,7 @@ class Person_ComparisonApp:
             # 进度更新
             progress_percent += step_progress
             if self.check_thread_running():
-                return 0
+                return 0, None
                 
             # 定期更新进度，避免UI卡顿
             if (row1 - 1) % self.update_frequency == 0:
@@ -564,24 +576,16 @@ class Person_ComparisonApp:
             # 逐列对比
             for col1 in range(1, max_col1 + 1):
                 if self.check_thread_running():
-                    return 0
+                    return 0, None
                     
                 sheet1_cell = sheet1.cell(row=row1, column=col1)
                 sheet2_cell = sheet2.cell(row=row2, column=col1)
                 
                 if self.cell_consistency_check(sheet1_cell, sheet2_cell):
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Agreed_color, 
-                        end_color=self.Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Agreed_color)
                 else:
                     row_isChanged_status_flag = True
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Not_Agreed_color, 
-                        end_color=self.Not_Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Not_Agreed_color)
             if row_isChanged_status_flag:
                 row_changed_list[row1] = 2  #表征本行是否变更的flag，2：对比不一致，红色
             else:
@@ -591,6 +595,9 @@ class Person_ComparisonApp:
         end_time = time.time()
         end_time_output = f"单元格对比耗时: {end_time - row_mapping_time}s"
         print(end_time_output)
+        
+        # 创建新增行数据sheet
+        added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
@@ -607,7 +614,7 @@ class Person_ComparisonApp:
         ======================================
         """))
         self.progress_updated.emit(target_progress)
-        return sheet1
+        return sheet1, added_sheet
     
     def mapping_col_by_title(self, sheet1, sheet2, title_row_number):
         """
@@ -841,6 +848,37 @@ class Person_ComparisonApp:
             # 捕获其他类型的异常，提供更具体的错误信息
             raise ValueError(f"填充行颜色时发生未知错误: {str(e)}") from e
         
+    def create_unique_sheet(self, sheet, row_changed_list):
+        """
+        创建新增行数据sheet
+        """
+        # 2. 创建新sheet
+        workbook = openpyxl.Workbook()
+        added_sheet = workbook.create_sheet(title="新增行数据")
+        
+        # 筛选出值为0的所有键
+        zero_indices = {k: v for k, v in row_changed_list.items() if v == 3}
+        print(f"zero_keys = {zero_indices}------------------------------")
+
+        
+        # 4. 写入新增行数据
+        for row_idx in zero_indices:
+            # 注意：Excel行号从1开始，original_sheet[row_idx] 获取整行
+            row_data = [cell.value for cell in sheet[row_idx]]
+            row_data[0] = "删除行"
+            added_sheet.append(row_data)
+            
+        # 5. 为新增行数据添加删除行标识
+        for index in range(1, added_sheet.max_row+1):
+            self.set_rows_color(added_sheet, index, self.Delete_color)
+            added_sheet.cell(row=index, column=1).font = Font(
+                name='Arial',
+                size=12,
+                bold=True,
+                color="000000"  # 黑色字体
+            )
+        return added_sheet
+    
     def compare_excel_sheet_by_index_mapping_title(
         self, 
         sheet1, 
@@ -940,9 +978,9 @@ class Person_ComparisonApp:
         # --------------------- 索引列重复检查 --------------------- #
         self.progress_current_task.emit("正在检查索引列是否存在重复值")
         if self.check_index_repeat(sheet1, index_value_list_file1, title_row_number) == 0:
-            return 0
+            return 0, None
         if self.check_index_repeat(sheet2, index_value_list_file2, title_row_number) == 0:
-            return 0
+            return 0, None
         
         check_index_time = time.time()
         check_index_time_output = f"索引检查耗时: {check_index_time - duplicates_time}s"
@@ -951,9 +989,9 @@ class Person_ComparisonApp:
         # --------------------- 合并单元格处理 --------------------- #
         self.progress_current_task.emit("正在拆分合并单元格")
         if not self.split_merged_cells(sheet1, index_value_list_file1):
-            return 0
+            return 0, None
         if not self.split_merged_cells(sheet2, index_value_list_file2):
-            return 0
+            return 0, None
         
         split_time = time.time()
         split_time_output = f"合并单元格拆分处理耗时: {split_time - check_index_time}s"
@@ -969,7 +1007,7 @@ class Person_ComparisonApp:
             title_row_number,
         )
         if index_column_mapping == 0:
-            return 0
+            return 0, None
         
         step_progress = delta_progress / len(index_column_mapping) if len(index_column_mapping) > 0 else 0
         row_mapping_time = time.time()
@@ -980,7 +1018,7 @@ class Person_ComparisonApp:
         self.progress_current_task.emit("正在建立列映射关系")
         title_row_mapping = self.mapping_col_by_title(sheet1, sheet2, title_row_number)
         if title_row_mapping == 0:
-            return 0
+            return 0, None
         
         col_mapping_time = time.time()
         col_mapping_time_output = f"列映射耗时: {col_mapping_time - row_mapping_time}s"
@@ -994,7 +1032,7 @@ class Person_ComparisonApp:
             # 进度更新
             progress_percent += step_progress
             if self.check_thread_running():
-                return 0
+                return 0, None
                 
             if (row1 - title_row_number + 1) % self.update_frequency == 0:
                 self.progress_updated.emit(round(progress_percent))
@@ -1020,18 +1058,10 @@ class Person_ComparisonApp:
                 sheet2_cell = sheet2.cell(row=row2, column=col2)
                 
                 if self.cell_consistency_check(sheet1_cell, sheet2_cell):
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Agreed_color, 
-                        end_color=self.Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Agreed_color)
                 else:
                     row_isChanged_status_flag = True
-                    sheet1_cell.fill = PatternFill(
-                        start_color=self.Not_Agreed_color, 
-                        end_color=self.Not_Agreed_color, 
-                        fill_type="solid"
-                    )
+                    self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Not_Agreed_color)
 
             # 记录行变更状态
             if row_isChanged_status_flag:
@@ -1049,8 +1079,13 @@ class Person_ComparisonApp:
         参与对比行数:{len(row_changed_list)}
         变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
         新增行数:{sum(1 for v in row_changed_list.values() if v == 3)}
+        新增列数:{sum(1 for v in title_row_mapping.values() if v == 0)}
         """)
         
+        # 创建新增行数据sheet
+        added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+
+            
         self.progress_current_task.emit(textwrap.dedent(f"""
         ======================================
         {duplicates_time_output}
@@ -1062,7 +1097,7 @@ class Person_ComparisonApp:
         ======================================
         """))
         self.progress_updated.emit(target_progress)
-        return sheet1
+        return sheet1, added_sheet
 
     def create_row_changed_rows(self, sheet, row_changed_list, title_row_number=0):
         """
@@ -1184,7 +1219,7 @@ class Person_ComparisonApp:
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             self.Progress_percent = 0
             self.progress_current_task.emit(f"对比完成，File1保存成功")
-            return 0
+            return 0, None
             
         return 1
 
@@ -1209,7 +1244,7 @@ class Person_ComparisonApp:
             for row in reversed(all_rows):  # 从最后一行开始反向遍历
                 # 检查任务是否被终止
                 if self.check_thread_running():
-                    return 0, "用户终止对比进程"
+                    return 0, None, "用户终止对比进程"
                 
                 # 检查当前行是否有有效数据
                 if any(cell.value is not None and str(cell.value).strip() != "" for cell in row):
@@ -1229,3 +1264,47 @@ class Person_ComparisonApp:
         except Exception as e:
             print(f"Error: {e}") 
             return 0, e
+        
+    def merge_sheet_to_another(self, source_sheet, target_sheet, skip_header=False):
+        """
+        将源工作表的数据合并到目标工作表的尾部
+        Args:
+            source_sheet: 源工作表对象（要合并的数据来源）
+            target_sheet: 目标工作表对象（数据要合并到的位置）
+            skip_header: 是否跳过源工作表的表头（第一行），默认False（不跳过）
+        """
+        # 获取目标工作表当前的最后一行（从1开始），新数据将从下一行开始追加
+        start_row = target_sheet.max_row + 1
+        self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并'{source_sheet.title}'{source_sheet.max_row}数据，当前合并到第 {start_row} 行--------------------------------------------")
+
+        
+        # 遍历源工作表的所有行（row是一个单元格对象的元组）
+        for row_idx, row in enumerate(source_sheet.iter_rows(values_only=False), start=1):
+            # 如果需要跳过表头，且当前是第一行，则跳过
+            if skip_header and row_idx == 1:
+                continue
+            
+            self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行数据")
+            # 遍历行中的每个单元格，复制值和格式到目标工作表
+            for col_idx, cell in enumerate(row, start=1):
+                # 目标单元格位置：start_row + 偏移量（row_idx-1），列索引col_idx
+                self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行第 {col_idx} 列数据")
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+
+                target_cell = target_sheet.cell(
+                    row=start_row + (row_idx - 1),
+                    column=col_idx
+                )
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+                # 复制单元格值
+                target_cell.value = cell.value
+                # 复制单元格样式（可选，根据需求决定是否保留格式）
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+                target_cell.font = cell.font.copy ()
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+                target_cell.fill = cell.fill.copy ()
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+                target_cell.border = cell.border.copy ()
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
+                target_cell.alignment = cell.alignment.copy ()
+                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")

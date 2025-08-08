@@ -392,26 +392,34 @@ class DataProcessor(QThread):
                 elif not row_data.mapping and len(row_data.col) != 0:
                     # 根据索引值对比， mapping=0, 填写index列数
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index, row_data.col = {row_data.col}")
-                    if not self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress):
+                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
-                    if not self.CompareApp.compare_excel_sheet_by_index(wb2_sheet, wb1_sheet_copy, row_data.col, file2_name, current_progress_percent, current_progress_percent+delta_progress):
+                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index(wb2_sheet, wb1_sheet_copy, row_data.col, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status:
                         raise ValueError(f"用户终止对比进程")
+                    self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                    self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
                     current_progress_percent += delta_progress
                     compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
                 else:
                     # 按索引和表头映射对比, mapping=1, 填写index列数
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}")
-                    if not self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress):
+                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status:
                         raise ValueError(f"用户终止对比进程")
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno} 对比第二个文件-------------")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
-                    if not self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress):
+                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status:
                         raise ValueError(f"用户终止对比进程")
+                    self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                    self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
                     current_progress_percent += delta_progress
                     compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
                 # 删除工作表
@@ -419,7 +427,6 @@ class DataProcessor(QThread):
             
             # 保存对比结果
             compare_compeleted_time = time.time()
-            # compare_compeleted_time_output = f"完成所有sheet对比任务耗时：{compare_compeleted_time}"
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             self.progress_updated.emit(90)
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
