@@ -597,7 +597,10 @@ class Person_ComparisonApp:
         print(end_time_output)
         
         # 创建新增行数据sheet
-        added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+        if sum(1 for v in row_changed_list.values() if v == 3):
+            added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+        else:
+            added_sheet = None
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
@@ -871,11 +874,18 @@ class Person_ComparisonApp:
         # 5. 为新增行数据添加删除行标识
         for index in range(1, added_sheet.max_row+1):
             self.set_rows_color(added_sheet, index, self.Delete_color)
+            # 设置字体
             added_sheet.cell(row=index, column=1).font = Font(
                 name='Arial',
                 size=12,
                 bold=True,
                 color="000000"  # 黑色字体
+            )
+            # 设置对齐方式
+            added_sheet.cell(row=index, column=1).alignment = Alignment(
+                horizontal='center',  # 水平居中
+                vertical='center',    # 垂直居中
+                wrap_text=True        # 自动换行
             )
         return added_sheet
     
@@ -1083,9 +1093,11 @@ class Person_ComparisonApp:
         """)
         
         # 创建新增行数据sheet
-        added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+        if sum(1 for v in row_changed_list.values() if v == 3):
+            added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+        else:
+            added_sheet = None
 
-            
         self.progress_current_task.emit(textwrap.dedent(f"""
         ======================================
         {duplicates_time_output}
@@ -1288,23 +1300,14 @@ class Person_ComparisonApp:
             # 遍历行中的每个单元格，复制值和格式到目标工作表
             for col_idx, cell in enumerate(row, start=1):
                 # 目标单元格位置：start_row + 偏移量（row_idx-1），列索引col_idx
-                self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行第 {col_idx} 列数据")
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
-
                 target_cell = target_sheet.cell(
                     row=start_row + (row_idx - 1),
                     column=col_idx
                 )
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
                 # 复制单元格值
                 target_cell.value = cell.value
                 # 复制单元格样式（可选，根据需求决定是否保留格式）
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
                 target_cell.font = cell.font.copy ()
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
                 target_cell.fill = cell.fill.copy ()
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
                 target_cell.border = cell.border.copy ()
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
                 target_cell.alignment = cell.alignment.copy ()
-                self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno}merge_sheet_to_another")
