@@ -63,10 +63,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
+from openpyxl.chart import (
+    BarChart, LineChart, PieChart,
+    Reference, Series
+)
 
 from Person_ComparisonApp import Person_ComparisonApp
 from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
+from Excel_chart_manager import ExcelChartManager
 
 output_path = ".\\outputfile"
 json_file_path = '.\\json\\config.json'
@@ -249,7 +254,28 @@ class restored_config_data_Container():
     
     def __repr__(self):
         return f"Container(row_number={self.row_number}, col_number={self.col_number}, file1_path={self.file1_path}, file2_path={self.file2_path}, config_data={self.config_data})"
+
+class chart_Container():
+    def __init__(self, labels_min_col=0, data_min_col=0, min_row=0, max_row=0):
+        self.labels_min_col = labels_min_col
+        self.data_min_col = data_min_col
+        self.min_row = min_row
+        self.max_row = max_row
         
+class Chart_Data_Container():
+    """图表数据容器，存储单个对比任务的图表数据"""
+    def __init__(self, sheet, chart_name="", chart_type=""):
+        self.sheet = sheet
+        self.chart_name = chart_name
+        self.chart_type = chart_type
+        self.data_range = None
+    
+    def create_chart_data_range(self, labels_min_col, data_min_col, min_row, max_row):
+        self.data_range = chart_Container(labels_min_col, data_min_col, min_row, max_row)
+        
+    def __repr__(self):
+        return f"Container(sheet_name={self.sheet.title}, chart_name={self.chart_name}, chart_type={self.chart_type}, chart_data={self.data_range})"
+
 class DataProcessor(QThread):
     """数据处理线程，负责Excel文件对比和数据处理"""
     progress_updated = Signal(int)          # 进度更新信号
@@ -284,6 +310,8 @@ class DataProcessor(QThread):
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
         self.progress_current_task.emit(f"开始时间：{formatted_time}\nopenning File")
 
+
+
         try:
             self.progress_updated.emit(0)
             print(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
@@ -293,6 +321,10 @@ class DataProcessor(QThread):
             wb2, error_msg = self.open_file(self.file2_path)   # 打开文件2
             if not wb2:
                 raise ValueError(f"打开文件2失败: {error_msg}")
+            self.wb1_chart_manager = ExcelChartManager(wb1)
+            self.wb2_chart_manager = ExcelChartManager(wb2)
+            self.wb1_chart_manager.set_sheet("summary report")
+            self.wb2_chart_manager.set_sheet("summary report")
             
             # 处理文件路径和输出路径
             file1_name, file1_ext = os.path.splitext(os.path.basename(self.file1_path))
@@ -315,7 +347,7 @@ class DataProcessor(QThread):
                 self.progress_updated.emit(current_progress_percent)
                 if not row[0] or not row[1]:  # 跳过空行
                     continue
-                
+
                 # 解析配置行
                 sheet1_name = row[0]
                 sheet2_name = row[1]
@@ -359,13 +391,18 @@ class DataProcessor(QThread):
                     result = f"处理索引: {sheet1_name}  ->  {sheet2_name}, 索引: {data.col}"
                     results.append(result)
                 results_data.append(data)
+                
             self.progress_current_task.emit("完成获取配置表，开始对比")
+            
 
             # 计算每完成一列的进度步进
             self.progress_current_task.emit(f"results_data数据整理完成：【 {results_data}】")
             delta_progress = float((90 - current_progress_percent)/len(results_data)/2)
             
             compare_result_info = ""
+            self.chart_data_container_list = []
+            report_data_min_row = 1
+            report_data_min_col = 5
             for row_data in results_data:
                 wb1_sheet = wb1[row_data.sheet1_name]
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
@@ -377,28 +414,49 @@ class DataProcessor(QThread):
                     raise ValueError(f"删除{row_data.sheet2_name}底行失败: {error_msg}")
                 # 更新当前进度
                 wb1_sheet_copy = wb1.copy_worksheet(wb1_sheet)
+                report_data_min_row += 2
                 if not row_data.mapping and len(row_data.col) == 0:
                     # 直接对比 mapping=0, 未填写index列数
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
+
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+2)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+2)
+                    report_data_min_row += 2
+                    
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
-                    if not self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress):
+                    sheet1 = self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress)
+                    if not sheet1:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
-                    
-                    if not self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress):
+                    sheet2 = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
+                    if not sheet2:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
+                    # 对比结果添加到数据源中，用于生成图表
+                    date1 = ExcelChartManager.get_report_by_first_column(sheet1, 0)
+
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1)
+                    date2 = ExcelChartManager.get_report_by_first_column(sheet2, 0)
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
                 elif not row_data.mapping and len(row_data.col) != 0:
                     # 根据索引值对比， mapping=0, 填写index列数
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+4)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+4)
+                    report_data_min_row += 4
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index, row_data.col = {row_data.col}")
-                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
-                    if not status:
+                    status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status1:
                         raise ValueError(f"用户终止对比进程")
                     result_info1 = self.CompareApp.result_info
                     current_progress_percent += delta_progress
-                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index(wb2_sheet, wb1_sheet_copy, row_data.col, file2_name, current_progress_percent, current_progress_percent+delta_progress)
-                    if not status:
+                    status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index(wb2_sheet, wb1_sheet_copy, row_data.col, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    
+                    if not status2:
                         raise ValueError(f"用户终止对比进程")
                     result_info2 = self.CompareApp.result_info
                     delete_row_number1 = 0
@@ -415,20 +473,34 @@ class DataProcessor(QThread):
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
                     compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
+                    # 对比结果添加到数据源中，用于生成图表
+                    date1 = ExcelChartManager.get_report_by_first_column(sheet1, 1)
+
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1)
+                    date2 = ExcelChartManager.get_report_by_first_column(sheet2, 1)
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
                 else:
                     # 按索引和表头映射对比, mapping=1, 填写index列数
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+4)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+4)
+                    report_data_min_row += 5
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}")
-                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
-                    if not status:
+                    status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status1:
                         raise ValueError(f"用户终止对比进程")
+                    
+
                     result_info1 = self.CompareApp.result_info
 
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     current_progress_percent += delta_progress
-                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
-                    if not status:
+                    status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status2:
                         raise ValueError(f"用户终止对比进程")
+
                     
                     result_info2 = self.CompareApp.result_info
                     delete_row_number1 = 0
@@ -441,6 +513,14 @@ class DataProcessor(QThread):
                     if add_sheet1:
                         self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
                         delete_row_number2 = add_sheet1.max_row
+                        
+                    # 对比结果添加到数据源中，用于生成图表
+                    date1 = ExcelChartManager.get_report_by_first_column(status1, 2)
+
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1)
+                    date2 = ExcelChartManager.get_report_by_first_column(status2, 2)
+
+                    self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
 
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
@@ -450,6 +530,9 @@ class DataProcessor(QThread):
                 wb1.remove(wb1_sheet_copy)
             
             # 保存对比结果
+            self.progress_current_task.emit("开始创建图表")
+            self.create_chart(self.chart_data_container_list)
+            self.progress_current_task.emit("完成创建图表")
             compare_compeleted_time = time.time()
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             self.progress_updated.emit(90)
@@ -505,6 +588,44 @@ class DataProcessor(QThread):
         
         return None
 
+    def create_chart(self, chart_data_container_list):
+        '''
+        生成图表
+        '''
+        print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_data_container_list = {chart_data_container_list}")
+        for chart_data in chart_data_container_list:
+            print(f"当前行数为：{inspect.currentframe().f_lineno} create_chart\nchart_data = {chart_data}")
+            pie_labels_range, pie_data_range = ExcelChartManager.create_referencec_data(chart_data.sheet, chart_data.data_range.labels_min_col, chart_data.data_range.data_min_col, chart_data.data_range.min_row, chart_data.data_range.max_row)
+            print(f"当前行数为：{inspect.currentframe().f_lineno} create_chart\npie_labels_range = {pie_labels_range}\npie_data_range = {pie_data_range}")
+            self.wb1_chart_manager.create_pie_chart(
+                title=chart_data.chart_name,
+                data_range=pie_data_range,
+                labels_range=pie_labels_range,
+                pos=f"{self.number_to_letter(chart_data.data_range.labels_min_col+10)}{chart_data.data_range.min_row}"
+
+
+            )
+    def number_to_letter(self, n):
+        """
+        将数字转换为从A开始的字母序列（类似Excel列标）
+        :param n: 正整数（从1开始）
+        :return: 对应的字母字符串（如1→A，26→Z，27→AA）
+        """
+        if n < 1:
+            raise ValueError("输入必须是大于0的正整数")
+        
+        result = []
+        while n > 0:
+            # 调整为0基索引（A对应0）
+            n -= 1
+            # 计算当前位字母（0→A, 1→B, ..., 25→Z）
+            result.append(chr(n % 26 + ord('A')))
+            # 处理下一位
+            n = n // 26
+        
+        # 反转结果得到正确顺序
+        return ''.join(reversed(result))
+    
     def stop(self):
         """停止对比进程"""
         self.CompareApp.is_running = False
@@ -524,6 +645,7 @@ class DataProcessor(QThread):
             print(error)
             ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return 0
+
     @staticmethod
     def open_file(file_path, read_only_flag = False):
         """打开Excel文件，支持.xls/.xlsx/.xlsm/.csv格式"""
@@ -1819,7 +1941,7 @@ class DataProcessingTool(QMainWindow):
         
         # 收集配置数据
         config_data = []
-        for row in range(self.table_row_number):
+        for row in range(0, self.table_row_number):
             row_data = []
             for col in range(self.table_column_number):
                 widget = current_table.cellWidget(row, col)
