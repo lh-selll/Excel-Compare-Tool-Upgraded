@@ -418,7 +418,7 @@ class DataProcessor(QThread):
                 else:
                     # 按索引和表头映射对比, mapping=1, 填写index列数
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}")
-                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
                     result_info1 = self.CompareApp.result_info
@@ -426,7 +426,7 @@ class DataProcessor(QThread):
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     current_progress_percent += delta_progress
-                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, row_data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
                     
