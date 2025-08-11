@@ -486,8 +486,8 @@ class DataProcessor(QThread):
                     self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+4)
                     self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+4)
                     report_data_min_row += 5
-                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}")
-                    status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}, row_data.title_row = {row_data.title_row}")
+                    status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status1:
                         raise ValueError(f"用户终止对比进程")
                     
@@ -497,7 +497,7 @@ class DataProcessor(QThread):
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     current_progress_percent += delta_progress
-                    status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, row_data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status2:
                         raise ValueError(f"用户终止对比进程")
 
