@@ -395,33 +395,57 @@ class DataProcessor(QThread):
                     status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
+                    result_info1 = self.CompareApp.result_info
                     current_progress_percent += delta_progress
-                    compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
                     status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index(wb2_sheet, wb1_sheet_copy, row_data.col, file2_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
-                    self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
-                    self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                    result_info2 = self.CompareApp.result_info
+                    delete_row_number1 = 0
+                    delete_row_number2 = 0
+
+                    if add_sheet2:
+                        self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                        delete_row_number1 = add_sheet2.max_row
+
+                    if add_sheet1:
+                        self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                        delete_row_number2 = add_sheet1.max_row
+
                     current_progress_percent += delta_progress
-                    compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
+                    compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
+                    compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
                 else:
                     # 按索引和表头映射对比, mapping=1, 填写index列数
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}")
                     status, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
+                    result_info1 = self.CompareApp.result_info
+
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
-                    self.progress_current_task.emit(f"当前行数为：{inspect.currentframe().f_lineno} 对比第二个文件-------------")
                     current_progress_percent += delta_progress
-                    compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
                     status, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status:
                         raise ValueError(f"用户终止对比进程")
-                    self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
-                    self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                    
+                    result_info2 = self.CompareApp.result_info
+                    delete_row_number1 = 0
+                    delete_row_number2 = 0
+
+                    if add_sheet2:
+                        self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                        delete_row_number1 = add_sheet2.max_row
+
+                    if add_sheet1:
+                        self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                        delete_row_number2 = add_sheet1.max_row
+
                     current_progress_percent += delta_progress
-                    compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
+                    compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
+                    compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
+
                 # 删除工作表
                 wb1.remove(wb1_sheet_copy)
             
@@ -638,7 +662,7 @@ class DataProcessingTool(QMainWindow):
         self.table_column_number = 7            #输入table的总列数
         self.index_col_position = [2, 4]        #放置index列位置，比如第2列到第4列，方便后续扩展（从0开始）
         self.table_row_number_range = [3, 16]    #放置index列位置，比如第2列到第4列，方便后续扩展（从0开始）
-        self.mapping_option = 5                 #选择是否需要mapping title选项所在的列，（从0开始）
+        self.mapping_option = 5                 #选择是否需要mapping title选项所在的界面表格列，（从0开始）
         self.title_rows = 6                     #title列所在的列数（从0开始）
         self.table_row_height = 32              # 表格行高
         self.table_heigh = self.table_row_number * self.table_row_height+50  # table的高度
@@ -1209,7 +1233,6 @@ class DataProcessingTool(QMainWindow):
                     # 设置映射状态
                     mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
                     if mapping_status not in ["Y", "N"]:
-                        mapping_status_combo.setCurrentText("N")
                         print(f"未知映射状态mapping_status: {mapping_status}")
                         mapping_status_combo.setCurrentText("N")  # 默认设置为N
                         continue  # 跳过当前循环
@@ -1607,45 +1630,48 @@ class DataProcessingTool(QMainWindow):
             sheet2_name = table.cellWidget(row, 1).currentText()
             print(f"sheet1_name ={sheet1_name}")
             print(f"sheet2_name ={sheet2_name}")
-            title_rows_number = header_spin.value()
-            # 基于第index个索引框内容，查找两个sheet中一致的title名称list
-            self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
-            
-            # 将索引列/数据列转换为带搜索功能的下拉框
-            for col in range(self.index_col_position[0], (self.index_col_position[1]+1)):
-                # 移除现有控件
-                old_widget = table.cellWidget(row, col)
-                if old_widget:
-                    table.removeCellWidget(row, col)
+            if sheet1_name and sheet2_name:
+                #获取标题行数
+                title_rows_number = header_spin.value()
                 
-                # 创建下拉框 - 可编辑，带搜索功能
-                combo = QComboBox()
-                combo.setEditable(True)
-                combo.addItem("")  # 添加空选项
+                # 基于第index个索引框内容，查找两个sheet中一致的title名称list
+                self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
+                
+                # 将索引列/数据列转换为带搜索功能的下拉框
+                for col in range(self.index_col_position[0], (self.index_col_position[1]+1)):
+                    # 移除现有控件
+                    old_widget = table.cellWidget(row, col)
+                    if old_widget:
+                        table.removeCellWidget(row, col)
+                    
+                    # 创建下拉框 - 可编辑，带搜索功能
+                    combo = QComboBox()
+                    combo.setEditable(True)
+                    combo.addItem("")  # 添加空选项
 
-                combo.addItems(self.title_list) #将所有title放入index的选项中
-                combo.setCurrentIndex(0)  # 默认选择空项
-                
-                # 设置自动补全功能
-                completer = QCompleter(self.title_list)
-                completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # 不区分大小写
-                completer.setFilterMode(Qt.MatchFlag.MatchContains)  # 包含匹配
-                combo.setCompleter(completer)
-                
-                # 设置只能选择列表中的值
-                def validate_input(combo=combo):
-                    text = combo.currentText()
-                    if text not in self.title_list:
-                        # 如果输入不在选项中，重置为之前的值
-                        index = combo.findText(text, Qt.MatchFlag.MatchExactly)
-                        if index == -1:
-                            combo.setCurrentIndex(0)  # 重置为空选项
-                        else:
-                            combo.setCurrentIndex(index)
-                
-                # 连接编辑完成信号
-                combo.lineEdit().editingFinished.connect(validate_input)
-                table.setCellWidget(row, col, combo)
+                    combo.addItems(self.title_list) #将所有title放入index的选项中
+                    combo.setCurrentIndex(0)  # 默认选择空项
+                    
+                    # 设置自动补全功能
+                    completer = QCompleter(self.title_list)
+                    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # 不区分大小写
+                    completer.setFilterMode(Qt.MatchFlag.MatchContains)  # 包含匹配
+                    combo.setCompleter(completer)
+                    
+                    # 设置只能选择列表中的值
+                    def validate_input(combo=combo):
+                        text = combo.currentText()
+                        if text not in self.title_list:
+                            # 如果输入不在选项中，重置为之前的值
+                            index = combo.findText(text, Qt.MatchFlag.MatchExactly)
+                            if index == -1:
+                                combo.setCurrentIndex(0)  # 重置为空选项
+                            else:
+                                combo.setCurrentIndex(index)
+                    
+                    # 连接编辑完成信号
+                    combo.lineEdit().editingFinished.connect(validate_input)
+                    table.setCellWidget(row, col, combo)
         else:
             # 禁用表头行数并重置
             header_spin.setEnabled(False)
