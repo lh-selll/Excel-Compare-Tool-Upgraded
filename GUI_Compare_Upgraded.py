@@ -264,11 +264,12 @@ class chart_Container():
         
 class Chart_Data_Container():
     """图表数据容器，存储单个对比任务的图表数据"""
-    def __init__(self, sheet, chart_name="", chart_type=""):
+    def __init__(self, sheet, chart_name="", chart_type="", colors=None):
         self.sheet = sheet
         self.chart_name = chart_name
         self.chart_type = chart_type
         self.data_range = None
+        self.colors = colors
     
     def create_chart_data_range(self, labels_min_col, data_min_col, min_row, max_row):
         self.data_range = chart_Container(labels_min_col, data_min_col, min_row, max_row)
@@ -293,6 +294,8 @@ class DataProcessor(QThread):
         self.canceled = False                   # 取消标志
         self.index_col_position = [2, 4]         # 索引列位置范围
         self.CompareApp = Person_ComparisonApp(self.progress_updated, self.progress_current_task, self.comparison_finished)
+        self.colors = [self.CompareApp.Agreed_color, self.CompareApp.Not_Agreed_color, self.CompareApp.No_match_color, self.CompareApp.Delete_color]
+
         self.Thread_start_time = time.time()
         
 
@@ -417,11 +420,11 @@ class DataProcessor(QThread):
                 report_data_min_row += 2
                 if not row_data.mapping and len(row_data.col) == 0:
                     # 直接对比 mapping=0, 未填写index列数
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie", self.colors))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie", self.colors))
 
-                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+2)
-                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+2)
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+1)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+1)
                     report_data_min_row += 2
                     
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
@@ -430,6 +433,7 @@ class DataProcessor(QThread):
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
+                    
                     sheet2 = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
                     if not sheet2:
                         raise ValueError(f"用户终止对比进程")
@@ -443,10 +447,10 @@ class DataProcessor(QThread):
                     self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
                 elif not row_data.mapping and len(row_data.col) != 0:
                     # 根据索引值对比， mapping=0, 填写index列数
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
-                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+4)
-                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+4)
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie", self.colors))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie", self.colors))
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+3)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+3)
                     report_data_min_row += 4
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index, row_data.col = {row_data.col}")
                     status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
@@ -481,10 +485,10 @@ class DataProcessor(QThread):
                     self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
                 else:
                     # 按索引和表头映射对比, mapping=1, 填写index列数
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie"))
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie"))
-                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+4)
-                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+4)
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie", self.colors))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie", self.colors))
+                    self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_min_row, report_data_min_row+3)
+                    self.chart_data_container_list[-1].create_chart_data_range(report_data_min_col+1, report_data_min_col+2, report_data_min_row, report_data_min_row+3)
                     report_data_min_row += 5
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}, row_data.title_row = {row_data.title_row}")
                     status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
@@ -516,10 +520,9 @@ class DataProcessor(QThread):
                         
                     # 对比结果添加到数据源中，用于生成图表
                     date1 = ExcelChartManager.get_report_by_first_column(status1, 2)
-
                     self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1)
+                    
                     date2 = ExcelChartManager.get_report_by_first_column(status2, 2)
-
                     self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2)
 
                     current_progress_percent += delta_progress
@@ -582,10 +585,6 @@ class DataProcessor(QThread):
             self.error_occurred.emit(f"处理失败: {str(e)}")
             self.comparison_finished.emit("failed")
 
-            # self.progress_updated.emit(0)
-        # finally:
-        #     self.progress_updated.emit(100)
-        
         return None
 
     def create_chart(self, chart_data_container_list):
@@ -595,15 +594,19 @@ class DataProcessor(QThread):
         print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_data_container_list = {chart_data_container_list}")
         for chart_data in chart_data_container_list:
             print(f"当前行数为：{inspect.currentframe().f_lineno} create_chart\nchart_data = {chart_data}")
-            pie_labels_range, pie_data_range = ExcelChartManager.create_referencec_data(chart_data.sheet, chart_data.data_range.labels_min_col, chart_data.data_range.data_min_col, chart_data.data_range.min_row, chart_data.data_range.max_row)
+            pie_labels_range, pie_data_range = ExcelChartManager.create_referencec_data(
+                chart_data.sheet, 
+                chart_data.data_range.labels_min_col, 
+                chart_data.data_range.data_min_col,
+                chart_data.data_range.min_row, 
+                chart_data.data_range.max_row
+            )
             print(f"当前行数为：{inspect.currentframe().f_lineno} create_chart\npie_labels_range = {pie_labels_range}\npie_data_range = {pie_data_range}")
             self.wb1_chart_manager.create_pie_chart(
                 title=chart_data.chart_name,
                 data_range=pie_data_range,
                 labels_range=pie_labels_range,
-                pos=f"{self.number_to_letter(chart_data.data_range.labels_min_col+10)}{chart_data.data_range.min_row}"
-
-
+                pos=f"{self.number_to_letter(chart_data.data_range.labels_min_col+10)}{chart_data.data_range.min_row}",
             )
     def number_to_letter(self, n):
         """
