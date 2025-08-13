@@ -7,7 +7,10 @@ from openpyxl.chart import (
 )
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.title import Title
+from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.chart.series import DataPoint
+from openpyxl.chart.shapes import GraphicalProperties
+
         
 class ExcelChartManager:
     """Excel图表管理类，支持创建、配置和插入多种图表"""
@@ -110,7 +113,7 @@ class ExcelChartManager:
         :param column: 列号（从1开始，1=A列，2=B列...）
         :param value: 要添加的值
         """
-        print(f"row = {row}\n, column = {column}\n, value_list = {value_list}")
+        print(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
 
         rows = row
         for row_data in value_list:
@@ -121,34 +124,74 @@ class ExcelChartManager:
             rows += 1
                 
                 
-    def create_bar_chart(self, title, data_range, categories_range, pos="E2", colors=None):
+    def create_bar_chart(self, title, data_range, categories_range, pos="E2", show_labels=True, colors=None):
         """创建柱状图
         :param colors: 可选的颜色列表，如['FF0000', '00FF00', '0000FF']
         """
-        chart = BarChart()
+        print(f"data_range = {data_range}, categories_range = {categories_range}")
+        chart = BarChart(orientation='vertical', grouping='standard')
         chart.title = title  # 直接使用字符串作为标题（兼容所有版本）
         chart.style = 10  # 预设样式
+        # 调整图表大小以确保标签显示空间
+        chart.width = 20  # 增加宽度
+        chart.height = 8  # 增加高度
         
         # 添加数据系列
-        for idx, col in enumerate(range(data_range.min_col, data_range.max_col + 1)):
-            series_data = Reference(
-                self.current_sheet,
-                min_col=col,
-                min_row=data_range.min_row,
-                max_row=data_range.max_row
-            )
-            series = Series(series_data, title_from_data=True)
-            if colors and idx < len(colors):
-                series.graphicalProperties.solidFill = colors[idx]
-            chart.append(series)
+        chart.add_data(data_range, titles_from_data=True)
         
         # 设置分类轴（X轴）
         chart.set_categories(categories_range)
+        # 确保坐标轴显示（默认已显示，这里显式设置）
+        chart.x_axis.visible = True  # X轴可见
+        chart.y_axis.visible = True  # Y轴可见
         
         # 设置坐标轴标题（直接用字符串）
+        # 设置X轴（分类轴）标题，确保类别正确关联
         chart.x_axis.title = "类别"
+        chart.x_axis.tickLblPos = "low"  # 标签显示在轴下方（关键设置）
+        chart.x_axis.majorGridlines = None  # 移除网格线
+        # chart.x_axis.tickMarkSkip = 1  # 强制显示所有标签
+        # Y轴标题
         chart.y_axis.title = "数值"
-        
+        chart.y_axis.majorGridlines = None  # 移除网格线
+
+        # 关键：设置图表布局和边距，控制内部坐标系大小
+        # ManualLayout用于精确控制绘图区位置和大小
+        chart.layout = Layout(
+            manualLayout=ManualLayout(
+                x=0.01,  # 左侧偏移（占图表宽度的20%），间接影响右侧留白
+                y=0.01, # 顶部偏移（占图表高度的15%），间接影响底部留白
+                layoutTarget="inner"  # 基于图表内部区域计算
+            )
+        )
+        # 调整柱子大小和间距，配合布局
+        chart.barWidth = 60  # 柱子宽度
+        chart.gapWidth = 120  # 类别间距
+        # 可选：显示数据标签（柱形上方显示数值）
+        if show_labels:
+            chart.dataLabels = DataLabelList()
+            # 1. 显示数值（最常用）
+            chart.dataLabels.showVal = True  # 显示数据值
+            # 2. 显示系列名称（如"销量"、"增长率"）
+            chart.dataLabels.showSerName = False  # 显示系列名称
+            # 3. 显示类别名称（如"产品A"、"产品B"）
+            chart.dataLabels.showCatName = False  # 不显示类别名称（默认）
+            
+        # 为每个类别的柱子设置颜色
+        if chart.series:
+            series = chart.series[0]
+            # 为每个数据点创建DataPoint并应用颜色
+            for i in range(len(colors)):
+                try:
+                    # 仅需指定索引即可创建DataPoint
+                    dp = DataPoint(idx=i)
+                    series.dPt.append(dp)
+                    # 创建图形属性并设置填充颜色
+                    gp = GraphicalProperties(solidFill=colors[i])
+                    # 为数据点应用颜色
+                    series.dPt[i].graphicalProperties = gp
+                except:
+                    break
         # 插入图表
         self.current_sheet.add_chart(chart, pos)
         return self

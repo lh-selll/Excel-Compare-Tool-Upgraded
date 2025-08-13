@@ -450,6 +450,7 @@ class Person_ComparisonApp:
         self.create_row_changed_rows(sheet1, row_changed_list)
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
         变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
         """)
         self.progress_updated.emit(target_progress)
@@ -604,6 +605,7 @@ class Person_ComparisonApp:
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
         变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
         新增行数:{sum(1 for v in row_changed_list.values() if v == 3)}
         """)
@@ -1087,6 +1089,7 @@ class Person_ComparisonApp:
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
         变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
         新增行数:{sum(1 for v in row_changed_list.values() if v == 3)}
         新增列数:{sum(1 for v in title_row_mapping.values() if v == 0)}
