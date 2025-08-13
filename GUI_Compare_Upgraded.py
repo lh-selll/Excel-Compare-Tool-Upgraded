@@ -73,10 +73,14 @@ from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 
-output_path = ".\\outputfile"
-json_file_path = '.\\json\\config.json'
-license_file_path = '.\\license\\license.key'
-compare_info_file_path = '.\\result.log'
+# 获取当前脚本所在目录的绝对路径（不受工作目录影响）
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 构建各文件/文件夹的绝对路径
+output_path = os.path.join(current_dir, "outputfile")
+json_file_path = os.path.join(current_dir, "json", "config.json")
+license_file_path = os.path.join(current_dir, "license", "license.key")
+compare_info_file_path = os.path.join(current_dir, "result.log")
 
 
 class FileSelectorWidget(QWidget):
@@ -306,7 +310,6 @@ class DataProcessor(QThread):
         restored_config_data.file1_path = self.file1_path
         restored_config_data.file2_path = self.file2_path
         restored_config_data.config_data = self.config_data
-        restored_config_data.save_to_file(json_file_path)
         self.progress_current_task.emit("/*************************************************开始任务********************************************************/")
         timestamp = time.time()
         local_time = time.localtime(timestamp)
@@ -316,6 +319,7 @@ class DataProcessor(QThread):
 
 
         try:
+            restored_config_data.save_to_file(json_file_path)
             self.progress_updated.emit(0)
             print(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
             wb1, error_msg = self.open_file(self.file1_path)   # 打开文件1
@@ -404,7 +408,7 @@ class DataProcessor(QThread):
             
             compare_result_info = ""
             self.chart_data_container_list = []
-            report_data_min_row = 1
+            report_data_min_row = 2
             report_data_min_col = 5
             for row_data in results_data:
                 wb1_sheet = wb1[row_data.sheet1_name]
@@ -417,7 +421,6 @@ class DataProcessor(QThread):
                     raise ValueError(f"删除{row_data.sheet2_name}底行失败: {error_msg}")
                 # 更新当前进度
                 wb1_sheet_copy = wb1.copy_worksheet(wb1_sheet)
-                report_data_min_row += 2
                 if not row_data.mapping and len(row_data.col) == 0:
                     # 直接对比 mapping=0, 未填写index列数
                     self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie", self.colors))
@@ -530,6 +533,7 @@ class DataProcessor(QThread):
                     compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
 
                 # 删除工作表
+                report_data_min_row += 12
                 wb1.remove(wb1_sheet_copy)
             
             # 保存对比结果
@@ -592,7 +596,8 @@ class DataProcessor(QThread):
         生成图表
         '''
         print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_data_container_list = {chart_data_container_list}")
-        for chart_data in chart_data_container_list:
+        # 遍历列表并同时获取索引和元素
+        for index, chart_data in enumerate(chart_data_container_list):
             print(f"当前行数为：{inspect.currentframe().f_lineno} create_chart\nchart_data = {chart_data}")
             pie_labels_range, pie_data_range = ExcelChartManager.create_referencec_data(
                 chart_data.sheet, 
@@ -606,7 +611,7 @@ class DataProcessor(QThread):
                 title=chart_data.chart_name,
                 data_range=pie_data_range,
                 labels_range=pie_labels_range,
-                pos=f"{self.number_to_letter(chart_data.data_range.labels_min_col+10)}{chart_data.data_range.min_row}",
+                pos=f"{self.number_to_letter(chart_data.data_range.labels_min_col+(15 if index%2 else 10))}{chart_data.data_range.min_row}",
             )
     def number_to_letter(self, n):
         """
