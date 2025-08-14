@@ -412,7 +412,7 @@ class DataProcessor(QThread):
             report_data_current_row = 2
             report_data_gap_row = 10
             # 定义图表左右数据范围的间隔列数
-            report_data_gap_cols = 20
+            report_data_gap_cols = 12
             for row_data in results_data:
                 wb1_sheet = wb1[row_data.sheet1_name]
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
@@ -426,8 +426,8 @@ class DataProcessor(QThread):
                 wb1_sheet_copy = wb1.copy_worksheet(wb1_sheet)
                 if not row_data.mapping and len(row_data.col) == 0:
                     # 直接对比 mapping=0, 未填写index列数
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件1[{sheet1_name}]对比文件2[{sheet2_name}]", "Pie", self.colors))
-                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"文件2[{sheet2_name}]对比文件1[{sheet1_name}]", "Pie", self.colors))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"sheet {sheet1_name}]相比\nsheet [{sheet2_name}]", "Pie", self.colors))
+                    self.chart_data_container_list.append(Chart_Data_Container(self.wb1_chart_manager.current_sheet, f"sheet {sheet2_name}]相比\nsheet [{sheet1_name}]", "Pie", self.colors))
                     
                     # 将对比结果数据的所在位置添加到数据源列表中，用于定位图表的数据源所在的区域
                     self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_current_row, report_data_current_row+1)  # 对比结果数据的所在位置
@@ -554,7 +554,7 @@ class DataProcessor(QThread):
                     compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
 
                 # 删除工作表
-                report_data_current_row += 12
+                report_data_current_row += report_data_gap_cols
                 wb1.remove(wb1_sheet_copy)
             
             self.progress_current_task.emit("开始创建图表")

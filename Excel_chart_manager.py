@@ -27,6 +27,8 @@ class ExcelChartManager:
                 self.current_sheet = self.workbook[sheet_name]
             else:
                 self.current_sheet = self.workbook.create_sheet(title=sheet_name)
+        
+        self.current_sheet.sheet_view.showGridLines = False
         return self  # 支持链式调用
     
     @staticmethod
@@ -133,8 +135,11 @@ class ExcelChartManager:
         chart.title = title  # 直接使用字符串作为标题（兼容所有版本）
         chart.style = 10  # 预设样式
         # 调整图表大小以确保标签显示空间
-        chart.width = 20  # 增加宽度
+        chart.width = 16  # 增加宽度
         chart.height = 8  # 增加高度
+        # 调整柱子大小和间距，配合布局
+        chart.barWidth = 15  # 柱子宽度
+        chart.gapWidth = 60  # 类别间距
         
         # 添加数据系列
         chart.add_data(data_range, titles_from_data=True)
@@ -164,9 +169,6 @@ class ExcelChartManager:
                 layoutTarget="inner"  # 基于图表内部区域计算
             )
         )
-        # 调整柱子大小和间距，配合布局
-        chart.barWidth = 60  # 柱子宽度
-        chart.gapWidth = 120  # 类别间距
         # 可选：显示数据标签（柱形上方显示数值）
         if show_labels:
             chart.dataLabels = DataLabelList()
