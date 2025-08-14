@@ -10,8 +10,64 @@ from openpyxl.chart.title import Title
 from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.chart.series import DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.styles import PatternFill, Alignment, Font
+from openpyxl.styles.borders import Border, Side
 
-        
+class BorderStyle:
+    def __init__(self):
+        # 1. 粗边框（最粗）
+        self.borderthick_border = Border(
+            left=Side(style="thick"),  # thick表示粗边框
+            right=Side(style="thick"),
+            top=Side(style="thick"),
+            bottom=Side(style="thick")
+        )
+
+        # 2. 中等粗边框
+        self.bordermedium_border = Border(
+            left=Side(style="medium"),  # medium表示中等粗细
+            right=Side(style="medium"),
+            top=Side(style="medium"),
+            bottom=Side(style="medium")
+        )
+
+        # 3. 细边框（默认常用）
+        self.borderthin_border = Border(
+            left=Side(style="thin"),  # thin表示细边框
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+
+        # 4. 顶部粗边框（混合样式）
+        self.border_top_thick_border = Border(
+            top=Side(style="thick"),
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+        # 5. 左侧粗边框（混合样式）
+        self.border_left_thick_border = Border(
+            left=Side(style="thick"),
+            top=Side(style="thin"),
+            right=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+        # 6. 右侧粗边框（混合样式）
+        self.border_right_thick_border = Border(
+            left=Side(style="thin"),
+            top=Side(style="thin"),
+            right=Side(style="thick"),
+            bottom=Side(style="thin")
+        )
+        # 7. 底部粗边框（混合样式）
+        self.border_bottom_thick_border = Border(
+            left=Side(style="thin"),
+            top=Side(style="thin"),
+            right=Side(style="thin"),
+            bottom=Side(style="thick")
+        )
+
 class ExcelChartManager:
     """Excel图表管理类，支持创建、配置和插入多种图表"""
     
@@ -19,6 +75,8 @@ class ExcelChartManager:
         """初始化图表管理器"""
         self.workbook = workbook if workbook else Workbook()
         self.current_sheet = self.workbook.active  # 默认使用当前活跃工作表
+        # 定义不同粗细的边框样式
+        self.border_style = BorderStyle()
 
     def set_sheet(self, sheet_name=None):
         """切换或创建目标工作表"""
@@ -108,7 +166,8 @@ class ExcelChartManager:
             self.current_sheet.append(row)
         return self  # 支持链式调用
 
-    def add_cell_value(self, row, column, value_list):
+    def add_cell_value(self, row, column, value_list, border_style = None):
+
         """
         在指定行和列添加单元格内容
         :param row: 行号（从1开始）
@@ -116,15 +175,123 @@ class ExcelChartManager:
         :param value: 要添加的值
         """
         print(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
+        if border_style != None:
+            if border_style == "thick":
+                border_style = self.border_style.borderthick_border
+            elif border_style == "medium":
+                border_style = self.border_style.bordermedium_border
+            elif border_style == "thin":
+                border_style = self.border_style.borderthin_border
+            elif border_style == "top":
+                border_style = self.border_style.border_top_thick_border
+            elif border_style == "left":
+                border_style = self.border_style.border_left_thick_border
+            elif border_style == "right":
+                border_style = self.border_style.border_right_thick_border
+            elif border_style == "bottom":
+                border_style = self.border_style.border_bottom_thick_border
+            else:
+                border_style = None
+
 
         rows = row
         for row_data in value_list:
             col = column
             for data in row_data:
                 self.current_sheet.cell(row=rows, column=col, value=data)
+                self.current_sheet.cell(row=rows, column=col).border = border_style
+                self.current_sheet.cell(row=rows, column=col).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行
                 col += 1
             rows += 1
-                
+            
+    def set_sheet_main_title(self, row, col, height, width, content, title_type="main"):
+        """
+        设置工作表的主标题
+        :param row: 行号（从1开始）
+        :param col: 列号（从1开始，1=A列，2=B列...）
+        :param height: 标题高度（合并的行数）
+        :param width: 标题宽度（合并的列数）
+        :param content: 标题内容
+        :param title_type: 标题类型，"main"为主要标题，"sub"为副标题
+        """
+        #添加chart_sheet的主标题
+        print(f"添加chart_sheet的主标题: row = {row}, col = {col}, height = {height}, width = {width}, content = {content}, title_type = {title_type}")
+
+        self.current_sheet.merge_cells(start_row=row, start_column=col, end_row=row+height-1, end_column=col+width-1)
+        self.add_cell_value(row, col, [[content]])
+
+        print(f"content = {content}")
+        
+        if title_type == "main":
+            # 1. 设置行高
+            # 主标题行高（适当增大，突出标题）
+            row_height = 60  # 行高值，数值越大行越高
+            title_font = Font(
+                name="微软雅黑",  # 选择清晰的无衬线字体
+                size=12,         # 较大字号突出标题
+                bold=True,       # 加粗
+                color="1F4E78",  # 深蓝色，专业大气
+                italic=False     # 不倾斜
+            )
+            border = self.border_style.borderthick_border
+            fill = PatternFill(
+                start_color="78c1e9",
+                end_color="78c1e9",
+                fill_type="solid"
+            )
+        elif title_type == "sub":
+            row_height = 50  # 行高值，数值越大行越高
+            title_font = Font(
+                name="微软雅黑",  # 选择清晰的无衬线字体
+                size=10,         # 较大字号突出标题
+                bold=True,       # 加粗
+                color="1F4E78",  # 深蓝色，专业大气
+                italic=False     # 不倾斜
+            )
+            border = None
+            fill = PatternFill(
+                start_color="dbedf7",
+                end_color="dbedf7",
+                fill_type="solid"
+            )
+
+        else:
+            row_height = 60  # 行高值，数值越大行越高
+            title_font = Font(
+                name="微软雅黑",  # 选择清晰的无衬线字体
+                size=12,         # 较大字号突出标题
+                bold=True,       # 加粗
+                color="1F4E78",  # 深蓝色，专业大气
+                italic=False     # 不倾斜
+            )
+            border = self.border_style.borderthick_border
+            fill = PatternFill(
+                start_color="78c1e9",
+                end_color="78c1e9",
+                fill_type="solid"
+            )
+
+        # 1. 设置行高
+        # 主标题行高（适当增大，突出标题）
+        self.current_sheet.row_dimensions[row].height = row_height  # 行高值，数值越大行越高
+        
+        # 2. 设置字体样式 - 大气美观的标题字体
+        self.current_sheet.cell(row=row, column=col).font = title_font
+        self.current_sheet.cell(row=row, column=col).fill = fill
+        self.current_sheet.cell(row=row, column=col).font = title_font
+
+        # 3. 设置单元格样式 - 左侧对齐
+        self.current_sheet.cell(row=row, column=col).alignment = Alignment(horizontal='left', vertical='center')
+        self.current_sheet.cell(row=row, column=col).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行 
+
+        # 4. 设置单元格样式 - 边框
+        # 列标题用粗边框
+        for i in range(row, row+height):
+            for j in range(col, col+width):
+                # 列标题用粗边框
+                self.current_sheet.cell(row=i, column=j).border = border
+                self.current_sheet.cell(row=i, column=j).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行 
+        
                 
     def create_bar_chart(self, title, data_range, categories_range, pos="E2", show_labels=True, colors=None):
         """创建柱状图
