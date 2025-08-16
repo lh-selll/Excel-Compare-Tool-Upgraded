@@ -313,7 +313,6 @@ class FileHandler:
             
             # 尝试打开文件
             os.startfile(normalized_path)
-            print(f"成功打开Excel文件: {file_path}")
             self.dataProcessingTool.current_task_edit.appendPlainText(f"成功打开Excel文件: {file_path}")
             return True
             

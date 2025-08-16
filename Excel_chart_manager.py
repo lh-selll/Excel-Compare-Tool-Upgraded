@@ -84,7 +84,7 @@ class ExcelChartManager:
             if sheet_name in self.workbook.sheetnames:
                 self.current_sheet = self.workbook[sheet_name]
             else:
-                self.current_sheet = self.workbook.create_sheet(title=sheet_name)
+                self.current_sheet = self.workbook.create_sheet(title=sheet_name, index=0)
         
         self.current_sheet.sheet_view.showGridLines = False
         return self  # 支持链式调用
@@ -233,7 +233,7 @@ class ExcelChartManager:
                 color="1F4E78",  # 深蓝色，专业大气
                 italic=False     # 不倾斜
             )
-            border = self.border_style.borderthick_border
+            border = None
             fill = PatternFill(
                 start_color="78c1e9",
                 end_color="78c1e9",
@@ -292,8 +292,8 @@ class ExcelChartManager:
                 self.current_sheet.cell(row=i, column=j).border = border
                 self.current_sheet.cell(row=i, column=j).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行 
         
-                
-    def create_bar_chart(self, title, data_range, categories_range, pos="E2", show_labels=True, colors=None):
+    @staticmethod
+    def create_bar_chart(sheet, title, data_range, categories_range, pos="E2", show_labels=True, colors=None):
         """创建柱状图
         :param colors: 可选的颜色列表，如['FF0000', '00FF00', '0000FF']
         """
@@ -362,8 +362,8 @@ class ExcelChartManager:
                 except:
                     break
         # 插入图表
-        self.current_sheet.add_chart(chart, pos)
-        return self
+        sheet.add_chart(chart, pos)
+        return 1
 
     def create_line_chart(self, title, data_range, categories_range, pos="E18", colors=None):
         """创建折线图

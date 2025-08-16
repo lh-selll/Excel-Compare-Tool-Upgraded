@@ -332,8 +332,8 @@ class DataProcessor(QThread):
                 raise ValueError(f"打开文件2失败: {error_msg}")
             self.wb1_chart_manager = ExcelChartManager(wb1)
             self.wb2_chart_manager = ExcelChartManager(wb2)
-            self.wb1_chart_manager.set_sheet("summary report")
-            self.wb2_chart_manager.set_sheet("summary report")
+            self.wb1_chart_manager.set_sheet("Summary Report")
+            self.wb2_chart_manager.set_sheet("Summary Report")
             
             # 处理文件路径和输出路径
             file1_name, file1_ext = os.path.splitext(os.path.basename(self.file1_path))
@@ -417,14 +417,14 @@ class DataProcessor(QThread):
             report_data_gap_cols = 14
             
             #添加chart_sheet的主标题
-            title_text1 = f"文件：{file1_name}\n对比\n文件：{file2_name}"
-            title_text2 = f"文件：{file2_name}\n对比\n文件：{file1_name}"
+            title_text1 = f"文件 (新)：{file1_name}\n对比\n文件 (旧)：{file2_name}"
+            title_text2 = f"文件 (新)：{file2_name}\n对比\n文件 (旧)：{file1_name}"
             # wb1 主标题位置
             self.wb1_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text1)
-            self.wb1_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text2)
+            # self.wb1_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text2)
             # wb2 主标题位置调换
             self.wb2_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text2)
-            self.wb2_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text1)
+            # self.wb2_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text1)
 
             compare_type = 0
             for row_data in results_data:
@@ -450,14 +450,14 @@ class DataProcessor(QThread):
                     report_data_current_row += report_data_gap_row
                     
                     print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
-                    sheet1 = self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress)
-                    if not sheet1:
+                    status1 = self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status1:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
                     
-                    sheet2 = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
-                    if not sheet2:
+                    status2 = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
+                    if not status2:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"===============文件2相比文件1==============={self.CompareApp.result_info}\n"
@@ -537,25 +537,26 @@ class DataProcessor(QThread):
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
                     compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
                     compare_type = 3
+                print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, status1 ,  status2 = {status2}, compare_type = {compare_type}")
 
                 # 获取对比结果中的数据（差异行数，变更行数，新增行数，删除行数），用于生成图表
                 date1 = ExcelChartManager.get_report_by_first_column(status1, compare_type)
                 date2 = ExcelChartManager.get_report_by_first_column(status2, compare_type)
                 # wb1
-                self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-2].data_range.min_row-1, self.chart_data_container_list[-2].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-2].chart_name, title_type="sub")
-                self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-1].chart_name, title_type="sub")
+                self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-2].data_range.min_row-1, self.chart_data_container_list[-2].data_range.labels_min_col, 1, report_data_gap_cols-2-3, self.chart_data_container_list[-2].chart_name, title_type="sub")
+                # self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-1].chart_name, title_type="sub")
 
                 # 将数据（差异行数，变更行数，新增行数，删除行数）添加到结果报告sheet中
                 self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1, "thin")
-                self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2, "thin")
+                # self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2, "thin")
                 
                 # wb2 chart_name位置调换
                 self.wb2_chart_manager.set_sheet_main_title(self.chart_data_container_list[-2].data_range.min_row-1, self.chart_data_container_list[-2].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-1].chart_name, title_type="sub")
-                self.wb2_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-2].chart_name, title_type="sub")
+                # self.wb2_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-2].chart_name, title_type="sub")
 
                 # 将数据（差异行数，变更行数，新增行数，删除行数）添加到结果报告sheet中，数据位置调换
                 self.wb2_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date2, "thin")
-                self.wb2_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date1, "thin")
+                # self.wb2_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date1, "thin")
 
                 # 删除工作表
                 report_data_current_row += report_data_gap_cols
@@ -564,8 +565,27 @@ class DataProcessor(QThread):
             #结束所有sheet的对比，开始创建图表
             self.progress_current_task.emit("开始创建图表")
             # 创建所有图表
-            self.create_chart(self.wb1_chart_manager, self.chart_data_container_list)
-            self.create_chart(self.wb2_chart_manager, self.chart_data_container_list)
+            for index, chart_data in enumerate(self.chart_data_container_list):
+                if index%2 == 0:
+                    # 创建图表数据引用
+                    wb1_labels_range, wb1_data_range = ExcelChartManager.create_referencec_data(
+                        self.wb1_chart_manager.current_sheet, 
+                        chart_data.data_range.labels_min_col,
+                        chart_data.data_range.data_min_col,
+                        chart_data.data_range.min_row, 
+                        chart_data.data_range.max_row
+                    )
+                    self.create_chart(self.wb1_chart_manager.current_sheet, chart_data.chart_name, wb1_labels_range, wb1_data_range, chart_data.data_range.max_row+2, chart_data.data_range.labels_min_col, chart_data.colors)
+                    
+                    wb2_labels_range, wb2_data_range = ExcelChartManager.create_referencec_data(
+                        self.wb2_chart_manager.current_sheet, 
+                        chart_data.data_range.labels_min_col,
+                        chart_data.data_range.data_min_col,
+                        chart_data.data_range.min_row, 
+                        chart_data.data_range.max_row
+                    )
+                    self.create_chart(self.wb2_chart_manager.current_sheet, chart_data.chart_name, wb2_labels_range, wb2_data_range, chart_data.data_range.max_row+2, chart_data.data_range.labels_min_col, chart_data.colors)
+
             
                     
             self.progress_current_task.emit("完成创建图表")
@@ -622,39 +642,28 @@ class DataProcessor(QThread):
 
         return None
 
-    def create_chart(self, chart_manager, chart_data_container_list):
+    def create_chart(self, sheet, chart_name, labels_range, data_range, position_row, position_col, colors_list):
         '''
         生成图表
+        :param chart_manager: 图表管理器
+        :param chart_data_container_list: 图表数据容器列表
+        :return: None
         '''
-        print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_data_container_list = {chart_data_container_list}")
-        # 遍历列表并同时获取索引和元素
-        for index, chart_data in enumerate(chart_data_container_list):
-            # 创建图表数据引用
-            pie_labels_range, pie_data_range = ExcelChartManager.create_referencec_data(
-                chart_manager.current_sheet, 
-                chart_data.data_range.labels_min_col, 
-                chart_data.data_range.data_min_col,
-                chart_data.data_range.min_row, 
-                chart_data.data_range.max_row
-            )
-            
-            # 计算图表位置
-            chart_position_col_char = self.number_to_letter(chart_data.data_range.labels_min_col)
-            chart_position_row      = chart_data.data_range.max_row+2
-            # 图表名称
-            chart_name = chart_data.chart_name
-            colors = chart_data.colors
+        print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_name = {chart_name}\nlabels_range = {labels_range}")
+        # 计算图表位置
+        chart_position_col_char = self.number_to_letter(position_col)
 
-            #创建bar图
-            chart_manager.create_bar_chart(
-                title=chart_name,
-                data_range=pie_data_range,
-                categories_range=pie_labels_range,
-                pos=f"{chart_position_col_char}{chart_position_row}",
-                show_labels=True,
-                colors=colors
-
-            )
+        #创建bar图
+        ExcelChartManager.create_bar_chart(
+            sheet               = sheet,
+            title               = chart_name,
+            data_range          = data_range,
+            categories_range    = labels_range,
+            pos                 = f"{chart_position_col_char}{position_row}",
+            show_labels         = True,
+            colors              = colors_list
+        )
+        
     def number_to_letter(self, n):
         """
         将数字转换为从A开始的字母序列（类似Excel列标）

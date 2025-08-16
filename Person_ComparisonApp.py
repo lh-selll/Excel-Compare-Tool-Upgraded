@@ -200,7 +200,7 @@ class Person_ComparisonApp:
         self.progress_current_task.emit(f"开始拆分")
         merged_cell_ranges = list(sheet.merged_cells.ranges)
         for merged_cell in merged_cell_ranges:
-            self.progress_current_task.emit(f"merged_cell = {merged_cell}")
+            # self.progress_current_task.emit(f"merged_cell = {merged_cell}")
             row_min = merged_cell.min_row
             row_max = merged_cell.max_row
             col_min = merged_cell.min_col
@@ -439,7 +439,7 @@ class Person_ComparisonApp:
             if all_cells_empty:
                 blank_row_flag += 1
                 if blank_row_flag >= 20:
-                    print_info = f"连续20行全部值为空，结束sheet【{sheet1.title}】的对比"
+                    print_info = f"连续20行全部值为空，结束sheet【{sheet1.title}】的对比\n"
                     print(print_info)
                     self.progress_current_task.emit(print_info)
                     break
@@ -567,7 +567,7 @@ class Person_ComparisonApp:
                 blank_row_flag += 1
                 row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
                 if blank_row_flag >= 20:
-                    self.progress_current_task.emit("连续20行无匹配，结束对比")
+                    self.progress_current_task.emit("连续20行无匹配，结束对比\n")
                     break
                 continue
                 
