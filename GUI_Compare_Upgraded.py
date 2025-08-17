@@ -733,6 +733,7 @@ class DataProcessor(QThread):
                                 keep_default_na=False,  # 关键：不将空白格解析为NaN
                                 na_values=[]  # 额外确保不将任何值识别为NaN（可选）
                             )
+                            # 替换所有NaN值为空字符串
                             df = df.fillna("")
                             print(f"成功读取文件，使用编码: {encoding}")
                             break
@@ -1490,12 +1491,16 @@ class DataProcessingTool(QMainWindow):
 
     def open_result_file(self, up_or_down):
         if up_or_down == 0:
-            if not self.file_operator.open_excel_file(self.output_file_path1):
-                return False
-            print(f"成功打开Excel文件1: {self.output_file_path1}")
+            status, error = self.file_operator.open_excel_file(self.output_file_path1)
+            if status == 0:
+                ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+
+                return False, error
         elif up_or_down == 1:
-            if not self.file_operator.open_excel_file(self.output_file_path2):
-                return False
+            status, error = self.file_operator.open_excel_file(self.output_file_path2)
+            if status == 0:
+                ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+                return False, error
             print(f"成功打开Excel文件2: {self.output_file_path2}")
         else:
             print("未知错误")

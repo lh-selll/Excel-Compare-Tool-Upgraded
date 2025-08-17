@@ -11,7 +11,7 @@ from pathlib import Path
 class FileHandler:
     """文件操作工具类，封装常见的文件读写、管理功能"""
     
-    def __init__(self, dataProcessingTool, verbose=False):
+    def __init__(self, verbose=False):
         """初始化Excel文件打开器"""
         self.verbose = verbose
         self.logger = self._setup_logger()
@@ -20,7 +20,6 @@ class FileHandler:
             '.txt', '.md', '.csv', '.log', '.py', 
             '.html', '.css', '.js', '.json', '.xml'
         )
-        self.dataProcessingTool = dataProcessingTool
         
     def _setup_logger(self):
         """配置日志记录器"""
@@ -286,17 +285,19 @@ class FileHandler:
                 subprocess.run(['xdg-open', file_path], check=True)
             else:
                 print(f"错误：不支持的操作系统 - {sys.platform}")
-                self.dataProcessingTool.current_task_edit.appendPlainText(f"错误：不支持的操作系统 - {sys.platform}")
-                return False
+                error = f"错误：不支持的操作系统 - {sys.platform}"
+                return False, error
+
 
             print(f"成功打开Text文件: {file_path}")
-            self.dataProcessingTool.current_task_edit.appendPlainText(f"成功打开Text文件: {file_path}")
-            return True
+            error = f"成功打开Text文件: {file_path}"
+            return True, error
+
 
         except Exception as e:
             print(f"打开文件失败：{str(e)}")
-            self.dataProcessingTool.current_task_edit.appendPlainText(f"打开文件失败：{str(e)}")
-            return False
+            error = f"打开文件失败：{str(e)}"
+            return False, error
         
     def open_excel_file(self, file_path):
         """使用默认Excel应用打开文件"""
@@ -313,14 +314,14 @@ class FileHandler:
             
             # 尝试打开文件
             os.startfile(normalized_path)
-            self.dataProcessingTool.current_task_edit.appendPlainText(f"成功打开Excel文件: {file_path}")
-            return True
+            error = f"成功打开Excel文件: {file_path}"
+            return True, error
             
         except (FileNotFoundError, ValueError, OSError) as e:
             self.logger.error(f"文件打开发生错误: {e}")
-            self.dataProcessingTool.current_task_edit.appendPlainText(f"错误: {e}")
-            return False
+            error = f"文件打开发生错误: {e}"
+            return False, error
         except Exception as e:
             self.logger.error(f"文件打开时发生未知错误: {e}")
-            self.dataProcessingTool.current_task_edit.appendPlainText(f"未知错误: {e}")
-            return False
+            error = f"文件打开时发生未知错误: {e}"
+            return False, error
