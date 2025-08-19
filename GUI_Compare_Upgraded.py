@@ -74,16 +74,35 @@ from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 
+# 检查是否在打包环境中运行
+import tempfile
 
-# 获取当前脚本所在目录的绝对路径（不受工作目录影响）
-current_dir = os.path.dirname(os.path.abspath(__file__))
+def get_real_path(relative_path):
+    """获取实际路径，兼容开发环境和 Nuitka 打包后的 EXE"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的 EXE 环境
+        # 获取 EXE 实际运行路径（而非临时目录）
+        exe_path = os.path.abspath(sys.executable)
+        exe_dir = os.path.dirname(exe_path)
+        # 拼接相对路径
+        real_path = os.path.join(exe_dir, relative_path)
+        
+        # 特殊处理：如果是 Nuitka 单文件模式的临时目录，强制使用 EXE 所在目录
+        if tempfile.gettempdir() in exe_dir:
+            # 用户实际放置 EXE 的目录（需确保 license 等文件与 EXE 同目录）
+            real_path = os.path.join(os.path.dirname(exe_path), relative_path)
+    else:
+        # 开发环境（直接使用脚本所在目录）
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        real_path = os.path.join(current_dir, relative_path)
+    
+    return real_path
 
-# 构建各文件/文件夹的绝对路径
-output_path = os.path.join(current_dir, "outputfile")
-json_file_path = os.path.join(current_dir, "json", "config.json")
-license_file_path = os.path.join(current_dir, "license", "license.key")
-compare_info_file_path = os.path.join(current_dir, "result.log")
-
+# 重新定义路径（使用新的路径函数）
+output_path = get_real_path("outputfile")
+json_file_path = get_real_path("json/config.json")
+license_file_path = get_real_path("license/license.key")
+compare_info_file_path = get_real_path("result.log")
 
 class FileSelectorWidget(QWidget):
     """文件选择组件，包含标签、路径输入框和浏览按钮"""
@@ -1494,22 +1513,27 @@ class DataProcessingTool(QMainWindow):
             status, error = self.file_operator.open_excel_file(self.output_file_path1)
             if status == 0:
                 ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-
                 return False, error
+            print(f"成功打开Excel文件1: {self.output_file_path1}")
+            self.current_task_edit.appendPlainText(f"成功打开Excel文件1: {self.output_file_path1}")
         elif up_or_down == 1:
             status, error = self.file_operator.open_excel_file(self.output_file_path2)
             if status == 0:
                 ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
                 return False, error
             print(f"成功打开Excel文件2: {self.output_file_path2}")
+            self.current_task_edit.appendPlainText(f"成功打开Excel文件2: {self.output_file_path2}")
         else:
             print("未知错误")
             return False
         return True
     
     def open_log_file(self):
-        if not self.file_operator.open_text_file(compare_info_file_path):
+        status, error = self.file_operator.open_text_file(compare_info_file_path)
+        if not status:
+            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return False
+        self.current_task_edit.appendPlainText(f"成功打开log文件: {compare_info_file_path}")
         return True
 
     def init_no_mapping_tab(self):
