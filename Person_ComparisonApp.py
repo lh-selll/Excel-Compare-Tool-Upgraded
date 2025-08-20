@@ -140,10 +140,29 @@ class Person_ComparisonApp:
             value = sheet.cell(row, col).value
             if value is not None:
                 # 提前处理字符串，避免后续重复替换
-                value = self._process_title_text(str(value))
+                if not isinstance(value, (int, float)):
+                    value = self._process_title_text(str(value))
+                else:
+                    # 判断是否为整数
+                    if self.is_integer(value):
+                        # 整数 → 比较整数部分（忽略.0差异）
+                        value = self._process_title_text(str(int(value)))
+                    else:
+                        # 有一个不是整数 → 直接比较字符串
+                        value = self._process_title_text(str(value))
                 merged_text += value
             
         return merged_text
+    
+    @staticmethod
+    def is_integer(value):
+        """判断一个数值是否为整数（允许浮点数形式的整数，如100.0）"""
+        try:
+            num = float(value)
+            # 整数的小数部分为0（如100.0 → 100.0 == 100）
+            return num == int(num)
+        except (ValueError, TypeError):
+            return False  # 非数值类型返回False
 
     def copy_cell_format(self, sheet, row1, col1, row_min, col_min):
         """
