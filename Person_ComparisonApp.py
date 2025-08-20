@@ -15,14 +15,13 @@
 ## 2025/07/29：V16,对比结果框中添加"对比结果摘要"，同时将摘要放入对比结果log文件中，以快速浏览对比结果
 ## 2025/07/29：V17, 添加delete_bottom_blank_rows方法，解决底部大量空白行导致的进度跳变问题
 ##
-import sys
 import inspect
 import ctypes
 import time
 import openpyxl, xlrd
 import textwrap
 from collections import Counter
-from typing import List, Dict, Set, Tuple, Optional, Union
+from typing import List, Dict, Optional, Union
 from collections import defaultdict
 import os
 import pandas as pd
@@ -1278,7 +1277,7 @@ class Person_ComparisonApp:
             for row in reversed(all_rows):  # 从最后一行开始反向遍历
                 # 检查任务是否被终止
                 if self.check_thread_running():
-                    return 0, None, "用户终止对比进程"
+                    return 0, "用户终止对比进程"
                 
                 # 检查当前行是否有有效数据
                 if any(cell.value is not None and str(cell.value).strip() != "" for cell in row):

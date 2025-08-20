@@ -6,8 +6,6 @@ from Crypto.Util.Padding import unpad
 import base64
 import os
 import sys
-# import tkinter as tk
-# from tkinter import messagebox
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 class DeviceIDLicenseVerify():

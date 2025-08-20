@@ -19,7 +19,6 @@ import openpyxl, xlrd
 import textwrap
 from collections import Counter
 import pandas as pd
-from openpyxl.styles import PatternFill, Alignment, Font
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QTableWidget, QTableWidgetItem, QComboBox, QLineEdit, QPushButton, QLabel,
@@ -29,10 +28,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
-from openpyxl.chart import (
-    BarChart, LineChart, PieChart,
-    Reference, Series
-)
 
 from Person_ComparisonApp import Person_ComparisonApp
 from Deviceid_license_verify import DeviceIDLicenseVerify
@@ -43,6 +38,8 @@ output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
 license_file_path = '.\\license\\license.key'
 compare_info_file_path = '.\\result.log'
+log_file_path = '.\\log\\processor.log'
+
 
 class FileSelectorWidget(QWidget):
     """文件选择组件，包含标签、路径输入框和浏览按钮"""
@@ -276,6 +273,7 @@ class DataProcessor(QThread):
         local_time = time.localtime(timestamp)
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
         self.progress_current_task.emit(f"开始时间：{formatted_time}\nopenning File")
+        FileHandler.clear_text_file(log_file_path)
 
 
 
@@ -586,6 +584,9 @@ class DataProcessor(QThread):
             FileHandler.create_text_file(compare_info_file_path)
             if not FileHandler.append_text_content(compare_info_file_path, report):
                 self.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
+                
+            if not FileHandler.append_text_content(compare_info_file_path, report):
+                self.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
 
             self.comparison_finished.emit("success")
             self.progress_updated.emit(100)
@@ -595,10 +596,19 @@ class DataProcessor(QThread):
             self.progress_current_task.emit(f"结束时间：{formatted_time}")
             self.progress_current_task.emit("/*************************************************结束任务*******************************************************/")
             ctypes.windll.user32.MessageBoxW(None, f"对比完成，输出文件在“{output_path}”文件夹中", "成功信息", 0x00000040)
+            fileappend_content = FileHandler.read_text_file(log_file_path)
+
+            if fileappend_content is None:
+                fileappend_content = f"获取log文件失败，失败原因：{str(e)}"
+                
+            FileHandler.append_text_content(compare_info_file_path, "\n\n对比进程信息：\n\n"+fileappend_content)
+
         except Exception as e:
             self.error_occurred.emit(f"处理失败: {str(e)}")
             self.comparison_finished.emit("failed")
-
+            wb1 = None
+            wb2 = None
+            
         return None
 
     def create_chart(self, sheet, chart_name, labels_range, data_range, position_row, position_col, colors_list):
@@ -796,6 +806,7 @@ class DataProcessingTool(QMainWindow):
     """主应用程序窗口"""
     global output_path
     global compare_info_file_path
+    global log_file_path
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Excel对比工具")
@@ -812,7 +823,7 @@ class DataProcessingTool(QMainWindow):
         self.progress_bar_heigh = 35            #进度条和开始按钮的高度
         self.path_edit_height = 23              #文件选项框的高度
         # self.setGeometry(400, 100, 1000, 600)
-        setup_window_geometry(self, 1000, 20)
+        setup_window_geometry(self, 1000, 700)
         self.output_file_path1 = ""
         self.output_file_path2 = ""
         
@@ -827,7 +838,8 @@ class DataProcessingTool(QMainWindow):
         self.Border_color = "#4480b2"      # 边框颜色
         
         # 初始化UI
-        self.init_ui()
+        # self.init_ui()
+        # self.restore_data()
 
     def init_ui(self):
         global system_start_time
@@ -835,7 +847,8 @@ class DataProcessingTool(QMainWindow):
         """初始化用户界面"""
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
-        self.file_operator = FileHandler(self)
+        self.file_operator = FileHandler(log_file_path)
+
         
         # 一键清空配置按钮
         clear_button_layout = QHBoxLayout()
@@ -1278,6 +1291,12 @@ class DataProcessingTool(QMainWindow):
         self.file1_selector.path_edit.textChanged.connect(self.check_files_selected)
         self.file2_selector.path_edit.textChanged.connect(self.check_files_selected)
         self.setCentralWidget(main_widget)
+        
+    def restore_data(self):
+        """恢复历史配置数据"""
+        delta_time = time.time() - system_start_time
+        print(f"启动时间 = {delta_time}s")
+        self.current_task_edit.appendPlainText(f"启动时间 = {delta_time}s")
         self.restored_config_data = restored_config_data_Container(15)
         if not self.restored_config_data.load_from_file(json_file_path):
             self.restored_config_data.update_row_number(self.table_row_number)
@@ -1294,9 +1313,6 @@ class DataProcessingTool(QMainWindow):
             else:
                 self.current_task_edit.appendPlainText(f"初始化完成，恢复历史配置")
 
-        delta_time = time.time() - system_start_time
-        print(f"启动时间 = {delta_time}s")
-        self.current_task_edit.appendPlainText(f"启动时间 = {delta_time}s")
 
     def restore_current_data(self, restored_data):
         """恢复历史配置数据"""
@@ -1850,6 +1866,10 @@ class DataProcessingTool(QMainWindow):
         self.button_down.setEnabled(complete_flag == "success")
         self.button_log.setEnabled(complete_flag == "success")
         print(f"bool(complete_flag) = {(complete_flag)}")
+        # if complete_flag == "success":
+        #     if not FileHandler.append_text_content(compare_info_file_path, "\n"+self.current_task_edit.toPlainText()):
+        #         self.current_task_edit.appendPlainText(f"{compare_info_file_path}文件追加错误")
+
 
     def add_addItems_for_combo(self, row_number, table, column, Option_value_list):
         """给table的列添加选项值"""
@@ -2044,10 +2064,16 @@ class DataProcessingTool(QMainWindow):
         self.processor.error_occurred.connect(self.show_error)
         self.processor.comparison_finished.connect(self.on_comparison_finished)
         self.processor.progress_current_task.connect(self.current_task_edit.appendPlainText)
+        self.processor.progress_current_task.connect(self.file_operator.logger.info)
         
         self.processor.finished.connect(self.processing_finished)
         self.processor.start()
         return 1
+
+    # def log_info(self, message):
+    #     """记录信息日志"""
+    #     self.file_operator.logger.info(message)
+
 
     def update_progress(self, value):
         """更新进度条"""
@@ -2243,8 +2269,11 @@ try:
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
     window.show()
+    window.init_ui()
+    window.restore_data()
     # 确保应用程序退出时返回正确的状态码
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
+
 
 except Exception as e:
     # 捕获应用程序启动过程中的任何异常（如导入错误、初始化失败）

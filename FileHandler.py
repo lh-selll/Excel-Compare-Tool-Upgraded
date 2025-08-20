@@ -2,17 +2,18 @@ import os
 import sys
 import shutil
 import logging
-import argparse
 import subprocess
 from typing import List, Optional, Union
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 
 class FileHandler:
     """文件操作工具类，封装常见的文件读写、管理功能"""
     
-    def __init__(self, verbose=False):
+    def __init__(self, log_file_path, verbose=False):
         """初始化Excel文件打开器"""
+        self.log_file_path = log_file_path
         self.verbose = verbose
         self.logger = self._setup_logger()
         self.excel_valid_extensions = ['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv']
@@ -22,22 +23,44 @@ class FileHandler:
         )
         
     def _setup_logger(self):
-        """配置日志记录器"""
-        logger = logging.getLogger('ExcelFileOpener')
-        logger.setLevel(logging.INFO if self.verbose else logging.WARNING)
+        """配置日志器（包含文件输出）"""
+        logger = logging.getLogger("DataProcessor")
+        logger.setLevel(logging.DEBUG)
         
-        # 创建控制台处理器
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
+        if logger.handlers:  # 避免重复添加处理器
+            return logger
         
-        # 创建日志格式
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
+        # 日志格式：时间 - 级别 - 模块:行号 - 消息
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
         
-        # 添加处理器到logger
-        if not logger.handlers:
-            logger.addHandler(ch)
+        # 创建日志文件夹
+        log_dir = os.path.dirname(self.log_file_path)
+        log_file_name = os.path.basename(self.log_file_path)
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, log_file_name)
+        print(f"log_file = {log_file}")
+
         
+        # 文件处理器（日志写入文件，支持轮转）
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=3*1024*1024,  # 3MB 一个文件
+            backupCount=3,         # 保留3个备份
+            encoding="utf-8"
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        
+        # 控制台处理器（同时在控制台输出）
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)  # 控制台只显示INFO及以上
+        console_handler.setFormatter(formatter)
+        
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
         return logger
     
     def validate_file_path(self, file_path, format):
@@ -325,3 +348,30 @@ class FileHandler:
             self.logger.error(f"文件打开时发生未知错误: {e}")
             error = f"文件打开时发生未知错误: {e}"
             return False, error
+        
+    @staticmethod
+    def clear_text_file(file_path: str, encoding: str = "utf-8") -> bool:
+        """
+        清空文本文件内容（保留文件本身）
+        :param file_path: 目标文件路径
+        :param encoding: 编码格式（默认utf-8）
+        :return: 操作是否成功
+        """
+        try:
+            # 检查文件是否存在（不存在则视为失败，避免误创建空文件）
+            if not os.path.exists(file_path):
+                print(f"清空失败：文件不存在 - {file_path}")
+                return False
+            
+            # 以写入模式打开文件并写入空内容（覆盖原有内容）
+            with open(file_path, "w", encoding=encoding) as f:
+                f.write("")  # 写入空字符串
+            
+            print(f"已清空文件内容：{file_path}")
+            return True
+        except PermissionError:
+            print(f"清空失败：没有权限写入文件 - {file_path}")
+            return False
+        except Exception as e:
+            print(f"清空文件时发生错误：{str(e)}")
+            return False
