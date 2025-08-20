@@ -1,44 +1,9 @@
-# -*- coding: utf-8 -*-
-## 基于DMEO3修改
-## 增加.xlsm格式支持，添加Person_ComparisonApp类
-## 增加当前task显示框及逻辑
-## 文件对比功能基本修改完毕，
-## 待办：保存文件步骤，用于处理结束的槽函数编写
-## 待办：设置sheet或index表头列的选项list，选择文件后能够直接选择文件中的sheet和sheet中的title
-## 待办：增加一列用于存放title所在的行
-## 待办：不mapping title时，index能够分别选择两个文件的index_col，以解决两个文件中的index列不在同一列的问题 --（还是拆分两个表格会好一点，不会混乱，如果保持现状，可能需要在修改mapping title时重建表格，需调研一下）
-## 
-## 待办：增加当前task框，放入当前进度，停止按钮还是失效，需要修复
-## 已完成增加当前task框，停止按钮问题已修复
-## 待办：增加页面，用于展示增删点和修改点表格
-## 取消展示增删点和修改点表格需求
-## 2025/06/20：增加一键清空界面配置的功能
-## 2025/06/21：增加一键清空界面配置的功能，增加一列，用于筛选新增、删除、修改的列
-## 2025/06/21：完成增加一键清空界面配置的功能
-## 2025/06/21：待办：增加一列，用于筛选新增、删除、修改的列
-## 2025/06/22：已完成增加一列，用于筛选新增、删除、修改的列
-## 2025/06/23：pyqt5->pyqt6>pyside6
-## 2025/06/26：待办：增加初始化界面，包含一个开始按钮，点击开始按钮后进入主界面
-## 2025/06/27：已完成增加初始化界面
-## 2025/06/27：待办：解决改变表格行数时，sheet选项丢失的问题
-## 2025/07/02：删除copy sheet，新增当前任务开始和结束的系统时间，解决progress回退问题
-## 2025/07/03：优化界面布局，缩小高度
-## 2025/07/03：取消license验证
-## 2025/07/08 修复当索引列为空时，报“用户终止进程”的错误
-## 2025/07/09 进一步压缩界面大小
-## 2025/07/29：V16,对比结果框中添加"对比结果摘要"，同时将摘要放入对比结果log文件中，以快速浏览对比结果
-## 2025/07/30：V16,增加三个按钮，分别可以快速打开对比结果excel文件，以及对比结果log文件
-## 2025/07/30：V16,解决处理CSV文件时的问题
-## 2025/07/31：待解决，直接对比时，底部空白行对比有差异
-## 2025/08/02：已解决，打开CSV文件时格式报错问题
-## 2025/08/02：待解决，第二个文件存在大量空行时，进度条存在问题，会从48%直接调至100%，继续测试json文件异常时的case
-## 2025/08/02：已解决，第二个文件存在大量空行时，进度条存在的问题，
-## 2025/08/02：待解决，继续测试json文件异常时的case
-## 2025/08/03：已解决，读取csv文件时，会将空白格转换为“Nan”，导致对比差异的问题
-## 2025/08/03：已解决，json文件异常时的case测试完成，增加在json中的mapping_status值异常时的处理策略，避免读取json文件时出现异常
-##
-## 
+# 在代码中添加版本信息（Nuitka会读取）
+__version__ = "1.0.0"
+__author__ = "Your Name"
+__description__ = "Excel文件对比工具，用于比较两个Excel表格的差异"
 
+# -*- coding: utf-8 -*-
 import ctypes
 import sys
 import os
@@ -74,14 +39,10 @@ from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 
-# 检查是否在打包环境中运行
-import tempfile
-
 output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
 license_file_path = '.\\license\\license.key'
 compare_info_file_path = '.\\result.log'
-no_license_flag = False  # 是否跳过license验证
 
 class FileSelectorWidget(QWidget):
     """文件选择组件，包含标签、路径输入框和浏览按钮"""
@@ -2229,8 +2190,8 @@ class InitialScreen(QWidget):
             error_label.setAlignment(Qt.AlignCenter)
             error_label.setStyleSheet("color: white; font-size: 16px;")
             error_label.setGeometry(0, 0, self.width(), self.height())
-    
-    def license_verify(self, license_file_path):
+    @staticmethod
+    def license_verify(license_file_path):
         print("开始许可证验证")
         verify_app = DeviceIDLicenseVerify(license_file_path)
         if not verify_app.verify_license():
@@ -2251,7 +2212,7 @@ class InitialScreen(QWidget):
         global license_file_path
         # 点击按钮后，显示主界面并关闭当前界面
         # 验证签名
-        if no_license_flag or self.license_verify(license_file_path):
+        if self.license_verify(license_file_path):
             # 打开主窗口
             self.main_window.show()
         
@@ -2269,8 +2230,6 @@ try:
     # 设置应用程序样式为 Fusion（跨平台统一风格，更现代）
     app.setStyle("Fusion")
 
-    
-    
     # 设置全局字体为 Segoe UI（Windows 默认字体），大小为 10 磅
     # 确保界面文字在不同系统上显示一致
     font = QFont("Segoe UI", 10)
@@ -2278,11 +2237,13 @@ try:
 
     # 创建主窗口实例（DataProcessingTool 类应继承自 QMainWindow 或 QWidget）
     window = DataProcessingTool()
-    initial_screen = InitialScreen(window)
-    initial_screen.show()
+    # initial_screen = InitialScreen(window)
+    # initial_screen.show()
+    InitialScreen.license_verify(license_file_path)
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
-    # sys.exit() 确保应用程序退出时返回正确的状态码
+    window.show()
+    # 确保应用程序退出时返回正确的状态码
     sys.exit(app.exec())
 
 except Exception as e:
