@@ -15,6 +15,7 @@ from openpyxl.styles.borders import Border, Side
 
 class BorderStyle:
     def __init__(self):
+
         # 1. 粗边框（最粗）
         self.borderthick_border = Border(
             left=Side(style="thick"),  # thick表示粗边框
@@ -71,12 +72,15 @@ class BorderStyle:
 class ExcelChartManager:
     """Excel图表管理类，支持创建、配置和插入多种图表"""
     
-    def __init__(self, workbook=None, is_running=True):
+    def __init__(self, logger_info, workbook=None):
         """初始化图表管理器"""
         self.workbook = workbook if workbook else Workbook()
         self.current_sheet = self.workbook.active  # 默认使用当前活跃工作表
         # 定义不同粗细的边框样式
         self.border_style = BorderStyle()
+        self.is_running = True
+        self.logger_info = logger_info
+
 
     def set_sheet(self, sheet_name=None):
         """切换或创建目标工作表"""
@@ -102,7 +106,8 @@ class ExcelChartManager:
         """
         # 存储第一列数据
         first_column = []
-        
+        print(f"当前行数为：{inspect.currentframe().f_lineno}sheet = {sheet}")
+
         # 遍历第一列的所有行（min_col=1, max_col=1 表示只取第一列）
         for row in sheet.iter_rows(min_col=1, max_col=1, values_only=True):
             # row是一个元组，包含当前行第一列的单元格值
@@ -128,6 +133,13 @@ class ExcelChartManager:
 
         return data
 
+    def check_thread_running(self):
+        """检查线程是否在运行（用于终止任务）"""
+        if not self.is_running:
+            return 1
+        else:
+            return 0
+        
     def _set_pie_slice_colors(self, chart, colors):
         """通过直接操作XML根元素设置饼图颜色"""
         # 获取图表的XML根元素（兼容所有版本的核心方法）
@@ -174,7 +186,7 @@ class ExcelChartManager:
         :param column: 列号（从1开始，1=A列，2=B列...）
         :param value: 要添加的值
         """
-        print(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
+        self.logger_info.emit(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
         if border_style != None:
             if border_style == "thick":
                 border_style = self.border_style.borderthick_border
@@ -198,11 +210,18 @@ class ExcelChartManager:
         for row_data in value_list:
             col = column
             for data in row_data:
+                # 检查任务是否被终止
+                if self.check_thread_running():
+                    return 0
+                # 写入单元格值
                 self.current_sheet.cell(row=rows, column=col, value=data)
+                # 设置边框
                 self.current_sheet.cell(row=rows, column=col).border = border_style
-                self.current_sheet.cell(row=rows, column=col).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行
+                # 设置自动换行
+                self.current_sheet.cell(row=rows, column=col).alignment = Alignment(wrap_text=True)    
                 col += 1
             rows += 1
+        return 1
             
     def set_sheet_main_title(self, row, col, height, width, content, title_type="main"):
         """
@@ -215,12 +234,13 @@ class ExcelChartManager:
         :param title_type: 标题类型，"main"为主要标题，"sub"为副标题
         """
         #添加chart_sheet的主标题
-        print(f"添加chart_sheet的主标题: row = {row}, col = {col}, height = {height}, width = {width}, content = {content}, title_type = {title_type}")
+        self.logger_info.emit(f"添加chart_sheet的主标题: row = {row}, col = {col}, height = {height}, width = {width}, content = {content}, title_type = {title_type}")
 
         self.current_sheet.merge_cells(start_row=row, start_column=col, end_row=row+height-1, end_column=col+width-1)
-        self.add_cell_value(row, col, [[content]])
+        if not self.add_cell_value(row, col, [[content]]):
+            return 0
 
-        print(f"content = {content}")
+        self.logger_info.emit(f"content = {content}")
         
         if title_type == "main":
             # 1. 设置行高
@@ -288,9 +308,15 @@ class ExcelChartManager:
         # 列标题用粗边框
         for i in range(row, row+height):
             for j in range(col, col+width):
+                # 检查任务是否被终止
+                if self.check_thread_running():
+                    return 0
+                
                 # 列标题用粗边框
                 self.current_sheet.cell(row=i, column=j).border = border
                 self.current_sheet.cell(row=i, column=j).alignment = Alignment(wrap_text=True)    #把第一个文件的单元格设为自动换行 
+        return 1
+
         
     @staticmethod
     def create_bar_chart(sheet, title, data_range, categories_range, pos="E2", show_labels=True, colors=None):
@@ -421,7 +447,7 @@ class ExcelChartManager:
         chart = PieChart()
         chart.title = title  # 直接使用字符串标题
         chart.style = 15
-        print(f"当前行数为：{inspect.currentframe().f_lineno} create_pie_chart, data_range = {data_range}")
+        self.logger_info.emit(f"当前行数为：{inspect.currentframe().f_lineno} create_pie_chart, data_range = {data_range}")
         
         # 添加数据系列
         series = Series(data_range, title_from_data=True)
@@ -439,7 +465,7 @@ class ExcelChartManager:
     def save(self, filename):
         """保存工作簿"""
         self.workbook.save(filename)
-        print(f"文件已保存：{filename}")
+        self.logger_info.emit(f"文件已保存：{filename}")
 
 
 def main():

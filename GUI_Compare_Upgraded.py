@@ -5,6 +5,7 @@ __description__ = "Excel文件对比工具，用于比较两个Excel表格的差
 
 # -*- coding: utf-8 -*-
 import ctypes
+from sqlite3.dbapi2 import Time
 import sys
 import os
 import traceback
@@ -26,7 +27,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QSplashScreen, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QLayout, QAbstractScrollArea, QSizePolicy, QTextEdit
 )
-from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
+from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize, QObject
+
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
 
 from Person_ComparisonApp import Person_ComparisonApp
@@ -239,24 +241,42 @@ class Chart_Data_Container():
     def __repr__(self):
         return f"Container(sheet_name={self.sheet.title}, chart_name={self.chart_name}, chart_type={self.chart_type}, chart_data={self.data_range})"
 
+# 正确的信号容器类（必须继承QObject，信号定义为类属性）
+class Signal_Container(QObject):
+    # 信号定义在类级别，不需要self
+    progress_updated = Signal(int)                 # 进度更新信号（参数：进度值）
+    result_text_edit = Signal(str)                 # 结果准备好信号（参数：结果文本）
+    progress_current_task = Signal(str)            # 当前任务进度信号（参数：任务描述）
+    comparison_finished = Signal(str)              # 对比完成信号（参数：完成信息）
+    error_occurred = Signal(str, str, object)      # 错误发生信号（参数：错误类型、描述、附加对象）
+    output_logger = Signal(str)                    # 输出日志信号（参数：日志内容）
+
+    def __init__(self):
+        super().__init__()  # 初始化父类QObject，确保信号机制生效
+        
+    def disconnect_signals(self):
+        self.progress_updated.disconnect()
+        self.result_text_edit.disconnect()
+        self.progress_current_task.disconnect()
+        self.comparison_finished.disconnect()
+        self.error_occurred.disconnect()
+        self.output_logger.disconnect()
+        
+
 class DataProcessor(QThread):
     """数据处理线程，负责Excel文件对比和数据处理"""
-    progress_updated = Signal(int)          # 进度更新信号
-    result_text_edit = Signal(str)              # 结果准备好信号
-    progress_current_task = Signal(str)     # 当前任务进度信号
-    comparison_finished = Signal(str)       # 对比完成信号
-    error_occurred = Signal (str, str, object)            # 错误发生信号，带返回值
     return_value = None      # 错误发生弹窗后的返回值
     is_running = True                           # 线程运行状态
 
-    def __init__(self, file1_path, file2_path, config_data, parent=None):
+    def __init__(self, file1_path, file2_path, config_data, signal_list, parent=None):
         super().__init__(parent)
         self.file1_path = file1_path            # 文件1路径
         self.file2_path = file2_path            # 文件2路径
         self.config_data = config_data          # 配置数据
         self.canceled = False                   # 取消标志
         self.index_col_position = [2, 4]         # 索引列位置范围
-        self.CompareApp = Person_ComparisonApp(self.progress_updated, self.progress_current_task, self.comparison_finished, self.error_occurred, self.result_text_edit)
+        self.signal_list = signal_list
+        self.CompareApp = Person_ComparisonApp(self.signal_list)
         self.colors = [self.CompareApp.Agreed_color, self.CompareApp.Not_Agreed_color, self.CompareApp.No_match_color, self.CompareApp.Delete_color]
 
         self.Thread_start_time = time.time()
@@ -269,27 +289,33 @@ class DataProcessor(QThread):
         restored_config_data.file1_path = self.file1_path
         restored_config_data.file2_path = self.file2_path
         restored_config_data.config_data = self.config_data
-        self.progress_current_task.emit("/*************************************************开始任务********************************************************/")
+        self.signal_list.progress_current_task.emit("/*************************************************开始任务********************************************************/")
         timestamp = time.time()
         local_time = time.localtime(timestamp)
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
-        self.progress_current_task.emit(f"开始时间：{formatted_time}\nopenning File")
-        FileHandler.clear_text_file(log_file_path)
+        self.signal_list.progress_current_task.emit(f"开始时间：{formatted_time}\nopenning File")
 
 
 
         try:
+            FileHandler.clear_text_file(log_file_path)
             restored_config_data.save_to_file(json_file_path)
-            self.progress_updated.emit(0)
-            print(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
+            self.signal_list.progress_updated.emit(0)
+            self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
+
             wb1, error_msg = self.open_file(self.file1_path)   # 打开文件1
             if not wb1:
                 raise ValueError(f"打开文件1失败: {error_msg}")
+            if not self.is_running:
+                raise ValueError("用户终止对比进程")
             wb2, error_msg = self.open_file(self.file2_path)   # 打开文件2
             if not wb2:
                 raise ValueError(f"打开文件2失败: {error_msg}")
-            self.wb1_chart_manager = ExcelChartManager(wb1)
-            self.wb2_chart_manager = ExcelChartManager(wb2)
+            if not self.is_running:
+                raise ValueError("用户终止对比进程")
+            
+            self.wb1_chart_manager = ExcelChartManager(self.signal_list.output_logger, wb1)
+            self.wb2_chart_manager = ExcelChartManager(self.signal_list.output_logger, wb2)
             self.wb1_chart_manager.set_sheet("Summary Report")
             self.wb2_chart_manager.set_sheet("Summary Report")
             
@@ -308,10 +334,12 @@ class DataProcessor(QThread):
             # 处理配置数据
             results = []
             results_data = []
-            self.progress_current_task.emit("开始获取配置表·····")
+            self.signal_list.progress_current_task.emit("开始获取配置表·····")
             for row in self.config_data:
+                if not self.is_running:
+                    raise ValueError("用户终止对比进程")
                 current_progress_percent += 2
-                self.progress_updated.emit(current_progress_percent)
+                self.signal_list.progress_updated.emit(current_progress_percent)
                 if not row[0] or not row[1]:  # 跳过空行
                     continue
 
@@ -359,11 +387,11 @@ class DataProcessor(QThread):
                     results.append(result)
                 results_data.append(data)
                 
-            self.progress_current_task.emit("完成获取配置表，开始对比")
+            self.signal_list.progress_current_task.emit("完成获取配置表，开始对比")
             
 
             # 计算每完成一列的进度步进
-            self.progress_current_task.emit(f"results_data数据整理完成：【 {results_data}】")
+            self.signal_list.progress_current_task.emit(f"results_data数据整理完成：【 {results_data}】")
             delta_progress = float((90 - current_progress_percent)/len(results_data)/2)
             
             compare_result_info = ""
@@ -378,11 +406,11 @@ class DataProcessor(QThread):
             title_text1 = f"文件 (新)：{file1_name}\n对比\n文件 (旧)：{file2_name}"
             title_text2 = f"文件 (新)：{file2_name}\n对比\n文件 (旧)：{file1_name}"
             # wb1 主标题位置
-            self.wb1_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text1)
-            # self.wb1_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text2)
+            if not self.wb1_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text1):
+                raise ValueError("用户终止对比进程")
             # wb2 主标题位置调换
-            self.wb2_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text2)
-            # self.wb2_chart_manager.set_sheet_main_title(row=1, col=report_data_gap_cols+1, height=1, width=report_data_gap_cols-2, content=title_text1)
+            if not self.wb2_chart_manager.set_sheet_main_title(row=1, col=1, height=1, width=report_data_gap_cols-2, content=title_text2):
+                raise ValueError("用户终止对比进程")
 
             compare_type = 0
             for row_data in results_data:
@@ -391,11 +419,11 @@ class DataProcessor(QThread):
                 wb1_sheet = wb1[row_data.sheet1_name]
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
                 if not status:
-                    raise ValueError(f"删除{row_data.sheet1_name}底行失败: {error_msg}")
+                    raise ValueError("用户终止对比进程")
                 wb2_sheet = wb2[row_data.sheet2_name]
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb2_sheet)
                 if not status:
-                    raise ValueError(f"删除{row_data.sheet2_name}底行失败: {error_msg}")
+                    raise ValueError("用户终止对比进程")
                 # 更新当前进度
                 wb1_sheet_copy = wb1.copy_worksheet(wb1_sheet)
                 #添加chart数据列表
@@ -409,14 +437,15 @@ class DataProcessor(QThread):
                     self.chart_data_container_list[-1].create_chart_data_range(report_data_gap_cols+1, report_data_gap_cols+2, report_data_current_row, report_data_current_row+1)
                     report_data_current_row += report_data_gap_row
                     
-                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
-                    status1 = self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress)
+                    self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
+
+                    status1, _ = self.CompareApp.compare_excel_sheet(wb1_sheet, wb2_sheet, current_progress_percent, current_progress_percent+delta_progress)
                     if not status1:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={self.CompareApp.result_info}"
                     
-                    status2 = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
+                    status2, _ = self.CompareApp.compare_excel_sheet(wb2_sheet, wb1_sheet_copy, current_progress_percent, current_progress_percent+delta_progress)
                     if not status2:
                         raise ValueError(f"用户终止对比进程")
                     current_progress_percent += delta_progress
@@ -429,7 +458,7 @@ class DataProcessor(QThread):
                     self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_current_row, report_data_current_row+3)
                     self.chart_data_container_list[-1].create_chart_data_range(report_data_gap_cols+1, report_data_gap_cols+2, report_data_current_row, report_data_current_row+3)
                     report_data_current_row += report_data_gap_row+2
-                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index, row_data.col = {row_data.col}")
+                    self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index, row_data.col = {row_data.col}")
                     status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index(wb1_sheet, wb2_sheet, row_data.col, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status1:
                         raise ValueError(f"用户终止对比进程")
@@ -444,11 +473,13 @@ class DataProcessor(QThread):
                     delete_row_number2 = 0
 
                     if add_sheet2:
-                        self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet):
+                            raise ValueError(f"用户终止对比进程")
                         delete_row_number1 = add_sheet2.max_row
 
                     if add_sheet1:
-                        self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet):
+                            raise ValueError(f"用户终止对比进程")
                         delete_row_number2 = add_sheet1.max_row
 
                     current_progress_percent += delta_progress
@@ -463,7 +494,7 @@ class DataProcessor(QThread):
                     self.chart_data_container_list[-2].create_chart_data_range(1, 2, report_data_current_row, report_data_current_row+3)
                     self.chart_data_container_list[-1].create_chart_data_range(report_data_gap_cols+1, report_data_gap_cols+2, report_data_current_row, report_data_current_row+3)
                     report_data_current_row += report_data_gap_row+2
-                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}, row_data.title_row = {row_data.title_row}")
+                    self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}, row_data.title_row = {row_data.title_row}")
                     status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status1:
                         raise ValueError(f"用户终止对比进程")
@@ -471,7 +502,7 @@ class DataProcessor(QThread):
 
                     result_info1 = self.CompareApp.result_info
 
-                    print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
+                    self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     current_progress_percent += delta_progress
                     status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, row_data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
@@ -484,11 +515,15 @@ class DataProcessor(QThread):
                     delete_row_number2 = 0
 
                     if add_sheet2:
-                        self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet)
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet):
+                            raise ValueError(f"用户终止对比进程")
+
                         delete_row_number1 = add_sheet2.max_row
 
                     if add_sheet1:
-                        self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet)
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet):
+                            raise ValueError(f"用户终止对比进程")
+
                         delete_row_number2 = add_sheet1.max_row
                     
 
@@ -497,33 +532,29 @@ class DataProcessor(QThread):
                     compare_result_info += f"Sheet Name: {row_data.sheet1_name} -> {row_data.sheet2_name}\n===============文件1相比文件2==============={result_info1}删除行数:{delete_row_number1}\n"
                     compare_result_info += f"===============文件2相比文件1==============={result_info2}删除行数:{delete_row_number2}\n"
                     compare_type = 3
-                print(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, status1 ,  status2 = {status2}, compare_type = {compare_type}")
+                self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, status1 ,  status2 = {status2}, compare_type = {compare_type}")
 
                 # 获取对比结果中的数据（差异行数，变更行数，新增行数，删除行数），用于生成图表
                 date1 = ExcelChartManager.get_report_by_first_column(status1, compare_type)
                 date2 = ExcelChartManager.get_report_by_first_column(status2, compare_type)
                 # wb1
                 self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-2].data_range.min_row-1, self.chart_data_container_list[-2].data_range.labels_min_col, 1, report_data_gap_cols-2-3, self.chart_data_container_list[-2].chart_name, title_type="sub")
-                # self.wb1_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-1].chart_name, title_type="sub")
-
+        
                 # 将数据（差异行数，变更行数，新增行数，删除行数）添加到结果报告sheet中
                 self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date1, "thin")
-                # self.wb1_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date2, "thin")
-                
+        
                 # wb2 chart_name位置调换
                 self.wb2_chart_manager.set_sheet_main_title(self.chart_data_container_list[-2].data_range.min_row-1, self.chart_data_container_list[-2].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-1].chart_name, title_type="sub")
-                # self.wb2_chart_manager.set_sheet_main_title(self.chart_data_container_list[-1].data_range.min_row-1, self.chart_data_container_list[-1].data_range.labels_min_col, 1, report_data_gap_cols-2, self.chart_data_container_list[-2].chart_name, title_type="sub")
 
                 # 将数据（差异行数，变更行数，新增行数，删除行数）添加到结果报告sheet中，数据位置调换
                 self.wb2_chart_manager.add_cell_value(self.chart_data_container_list[-2].data_range.min_row, self.chart_data_container_list[-2].data_range.labels_min_col, date2, "thin")
-                # self.wb2_chart_manager.add_cell_value(self.chart_data_container_list[-1].data_range.min_row, self.chart_data_container_list[-1].data_range.labels_min_col, date1, "thin")
-
+                
                 # 删除工作表
                 report_data_current_row += report_data_gap_cols
                 wb1.remove(wb1_sheet_copy)
             
             #结束所有sheet的对比，开始创建图表
-            self.progress_current_task.emit("开始创建图表")
+            self.signal_list.progress_current_task.emit("开始创建图表")
             # 创建所有图表
             for index, chart_data in enumerate(self.chart_data_container_list):
                 if not self.is_running:
@@ -550,23 +581,23 @@ class DataProcessor(QThread):
 
             
                     
-            self.progress_current_task.emit("完成创建图表")
+            self.signal_list.progress_current_task.emit("完成创建图表")
             
             compare_compeleted_time = time.time()
-            self.progress_updated.emit(90)
-            self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
+            self.signal_list.progress_updated.emit(90)
+            self.signal_list.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             # 保存对比结果
             if self.saving_file(wb1, output_path1):
-                self.progress_current_task.emit("File1保存成功")
-                self.progress_current_task.emit(f"File1:output_path1 = {output_path1}")
-            self.progress_updated.emit(95)
+                self.signal_list.progress_current_task.emit("File1保存成功")
+                self.signal_list.progress_current_task.emit(f"File1:output_path1 = {output_path1}")
+            self.signal_list.progress_updated.emit(95)
             if self.saving_file(wb2, output_path2):
-                self.progress_current_task.emit("File2保存成功")
-                self.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
+                self.signal_list.progress_current_task.emit("File2保存成功")
+                self.signal_list.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
             wb1.close()
             wb2.close()
             saving_compeleted_time = time.time()
-            self.progress_current_task.emit(textwrap.dedent(f"""
+            self.signal_list.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
             完成所有sheet对比任务耗时：{compare_compeleted_time - self.Thread_start_time}s
             保存所有文档耗时：{saving_compeleted_time - compare_compeleted_time}s
@@ -582,35 +613,42 @@ class DataProcessor(QThread):
             report += "\n".join(results)
             report += "\n\n"+ compare_result_info
             
-            self.result_text_edit.emit(report)
+            self.signal_list.result_text_edit.emit(report)
             FileHandler.delete_file(compare_info_file_path)
             FileHandler.create_text_file(compare_info_file_path)
             if not FileHandler.append_text_content(compare_info_file_path, report):
-                self.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
-                
-            if not FileHandler.append_text_content(compare_info_file_path, report):
-                self.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
+                self.signal_list.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
 
-            self.comparison_finished.emit("success")
-            self.progress_updated.emit(100)
+            self.signal_list.comparison_finished.emit("success")
+            self.signal_list.progress_updated.emit(100)
             timestamp = time.time()
             local_time = time.localtime(timestamp)
             formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
-            self.progress_current_task.emit(f"结束时间：{formatted_time}")
-            self.progress_current_task.emit("/*************************************************结束任务*******************************************************/")
+            self.signal_list.progress_current_task.emit(f"结束时间：{formatted_time}")
+            self.signal_list.progress_current_task.emit("/*************************************************结束任务*******************************************************/")
             # ctypes.windll.user32.MessageBoxW(None, f"对比完成，输出文件在“{output_path}”文件夹中", "成功信息", 0x00000040)
             success = f"对比完成，输出文件在“{output_path}”文件夹中"
-            self.error_occurred.emit("SUCCESS", success, None)
+            self.signal_list.error_occurred.emit("SUCCESS", success, None)
             fileappend_content = FileHandler.read_text_file(log_file_path)
 
             if fileappend_content is None:
                 fileappend_content = f"获取log文件失败，失败原因：{str(e)}"
-                
-            FileHandler.append_text_content(compare_info_file_path, "\n\n对比进程信息：\n\n"+fileappend_content)
+            
+            fileappend_content_append = textwrap.dedent(f"""\n\n
+*********************************************************************************************
+*********************************************************************************************
+*******************                                                        ******************
+*******************                    对比进程信息：                        ******************
+*******************                                                        ******************
+*********************************************************************************************
+*********************************************************************************************
+            \n\n{fileappend_content}
+            """)
+            FileHandler.append_text_content(compare_info_file_path, fileappend_content_append)
 
         except Exception as e:
-            self.error_occurred.emit("ERROR", f"处理失败: {str(e)}", None)
-            self.comparison_finished.emit("failed")
+            self.signal_list.error_occurred.emit("ERROR", f"处理失败: {str(e)}", None)
+            self.signal_list.comparison_finished.emit("failed")
             wb1 = None
             wb2 = None
             
@@ -623,7 +661,7 @@ class DataProcessor(QThread):
         :param chart_data_container_list: 图表数据容器列表
         :return: None
         '''
-        print(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_name = {chart_name}\nlabels_range = {labels_range}")
+        self.signal_list.output_logger.emit(f"当前行数为：{inspect.currentframe().f_lineno} \nchart_name = {chart_name}\nlabels_range = {labels_range}")
         # 计算图表位置
         chart_position_col_char = self.number_to_letter(position_col)
 
@@ -645,7 +683,7 @@ class DataProcessor(QThread):
         :return: 对应的字母字符串（如1→A，26→Z，27→AA）
         """
         if n < 1:
-            raise ValueError("输入必须是大于0的正整数")
+            raise ValueError(f"number_to_letter：数字转列字母时, 位置输入必须是大于0的正整数 n = {n}")
         
         result = []
         while n > 0:
@@ -661,8 +699,14 @@ class DataProcessor(QThread):
     
     def stop(self):
         """停止对比进程"""
-        self.CompareApp.is_running = False
-        self.is_running = False
+        try:
+            self.CompareApp.is_running = False
+            self.is_running = False
+            self.wb1_chart_manager.is_running = False
+            self.wb2_chart_manager.is_running = False
+        except Exception as e:
+            self.signal_list.progress_current_task.emit(f"{str(e)}")
+
 
     def get_index_by_ColHeader(self, ColumnHeader):
         """将列字母转换为列号（如C->3）"""
@@ -672,12 +716,12 @@ class DataProcessor(QThread):
             for s in range(0, len(ColumnHeader)):
                 index_arrays = ord(ColumnHeader[s]) - ord('A') + 1 #计算每个字母的值
                 index_value = index_value + index_arrays * (26 ** (len(ColumnHeader) - s - 1))
-            print(f"index_value = {index_value}")
+            self.signal_list.output_logger.emit(f"index_value = {index_value}")
             return index_value
         except ValueError:
             error = f"get_index_by_ColHeader 失败"
-            print(error)
-            self.error_occurred.emit("WARNING", error, None)
+            self.signal_list.output_logger.emit(error)
+            self.signal_list.error_occurred.emit("WARNING", error, None)
             return 0
 
     @staticmethod
@@ -710,7 +754,7 @@ class DataProcessor(QThread):
                             )
                             # 替换所有NaN值为空字符串
                             df = df.fillna("")
-                            print(f"成功读取文件，使用编码: {encoding}")
+                            self.signal_list.output_logger.emit(f"成功读取文件，使用编码: {encoding}")
                             break
                         except UnicodeDecodeError:
                             if encoding == encodings[-1]:
@@ -738,7 +782,7 @@ class DataProcessor(QThread):
                 
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
-            print(error)
+            self.signal_list.output_logger.emit(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return (None, error)
         except openpyxl.utils.exceptions.InvalidFileException:
@@ -771,10 +815,10 @@ class DataProcessor(QThread):
                     df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
                     df.to_csv(output_path, index=False, header=False)
                 
-                print(f"文件保存成功: {output_path}")
+                self.signal_list.output_logger.emit(f"文件保存成功: {output_path}")
                 return 1
             except Exception as e:
-                print(e)
+                self.signal_list.output_logger.emit(e)
                 if isinstance(e, PermissionError):
                     error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
                 elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
@@ -798,7 +842,7 @@ class DataProcessor(QThread):
                             df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
                             df.to_csv(output_path, index=False, header=False)
                         
-                        print(f"文件保存成功: {output_path}")
+                        self.signal_list.output_logger.emit(f"文件保存成功: {output_path}")
                         return 1
                     except FileExistsError:
                         error = f"文件夹 {output_path} 已经存在。"
@@ -807,10 +851,10 @@ class DataProcessor(QThread):
                 else:
                     error = f"保存文件时出现未知错误：{str(e)}"
 
-                print(error)
-                self.progress_current_task.emit(f"{error}")
+                self.signal_list.output_logger.emit(error)
+                self.signal_list.progress_current_task.emit(f"{error}")
                 # 保存失败，询问是否重试
-                self.error_occurred.emit("QUESTION", error, self)
+                self.signal_list.error_occurred.emit("QUESTION", error, self)
                 self.exec()
                 if not self.return_value:
                     raise ValueError(f"文件保存失败：{str(e)}")
@@ -843,6 +887,7 @@ class DataProcessingTool(QMainWindow):
         
         # 当前配置数据
         self.config_data = [[] for _ in range(self.table_row_number)]
+        self.signal_list = Signal_Container()
         self.wb1 = None
         self.wb2 = None
         self.title_list = []
@@ -1309,21 +1354,21 @@ class DataProcessingTool(QMainWindow):
     def restore_data(self):
         """恢复历史配置数据"""
         delta_time = time.time() - system_start_time
-        print(f"启动时间 = {delta_time}s")
+        self.file_operator.logger.info(f"启动时间 = {delta_time}s")
         self.current_task_edit.appendPlainText(f"启动时间 = {delta_time}s")
         self.restored_config_data = restored_config_data_Container(15)
         if not self.restored_config_data.load_from_file(json_file_path):
             self.restored_config_data.update_row_number(self.table_row_number)
             if os.path.exists(json_file_path):
                 os.remove(json_file_path)  # 删除文件
-                print(f"文件 {json_file_path} 已成功删除")
+                self.file_operator.logger.info(f"文件 {json_file_path} 已成功删除")
         else:
             restored_result, error_msg = self.restore_current_data(self.restored_config_data) #加载历史数据
             if not restored_result:
                 self.current_task_edit.appendPlainText(f"配置文件有误，已清空配置：\n原因:{error_msg}")
                 if os.path.exists(json_file_path):
                     os.remove(json_file_path)  # 删除文件
-                    print(f"文件 {json_file_path} 已成功删除")
+                    self.file_operator.logger.info(f"文件 {json_file_path} 已成功删除")
             else:
                 self.current_task_edit.appendPlainText(f"初始化完成，恢复历史配置")
 
@@ -1331,7 +1376,7 @@ class DataProcessingTool(QMainWindow):
     def restore_current_data(self, restored_data):
         """恢复历史配置数据"""
         try:
-            print(f"func: restore_current_data, restored_data = {restored_data}")
+            self.file_operator.logger.info(f"func: restore_current_data, restored_data = {restored_data}")
             file1_path = restored_data.file1_path
             file2_path = restored_data.file2_path
             self.table_row_number = restored_data.row_number
@@ -1347,7 +1392,7 @@ class DataProcessingTool(QMainWindow):
             # 检查文件路径是否存在
             if not (file1_path and file2_path):
                 error_msg = f"文件路径不完整: file1={file1_path}, file2={file2_path}"
-                print(error_msg)
+                self.file_operator.logger.info(error_msg)
                 return (0, error_msg)
             
             # 打开第一个文件
@@ -1367,8 +1412,8 @@ class DataProcessingTool(QMainWindow):
             self.output_file_path2 = self.get_file_output_path_byFilepath(file2_path)
             self.wb1 = wb1
             self.wb2 = wb2
-            print(f"wb1.sheetnames = {wb1.sheetnames}")
-            print(f"wb2.sheetnames = {wb2.sheetnames}")
+            self.file_operator.logger.info(f"wb1.sheetnames = {wb1.sheetnames}")
+            self.file_operator.logger.info(f"wb2.sheetnames = {wb2.sheetnames}")
             
             # 处理表格配置数据
             for row in range(0, self.table_row_number):
@@ -1380,7 +1425,7 @@ class DataProcessingTool(QMainWindow):
                     index_column_list = restored_data.config_data[row][self.index_col_position[0]: self.index_col_position[1]+1]
                     title_row_number = restored_data.config_data[row][self.title_rows]
                     
-                    print(f"sheet1_name = {sheet1_name}, sheet2_name = {sheet2_name}")
+                    self.file_operator.logger.info(f"sheet1_name = {sheet1_name}, sheet2_name = {sheet2_name}")
                     
                     # 获取工作表索引
                     try:
@@ -1404,7 +1449,7 @@ class DataProcessingTool(QMainWindow):
                     # 设置映射状态
                     mapping_status_combo = self.Compare_Config_table.cellWidget(row, self.mapping_option)
                     if mapping_status not in ["Y", "N"]:
-                        print(f"未知映射状态mapping_status: {mapping_status}")
+                        self.file_operator.logger.info(f"未知映射状态mapping_status: {mapping_status}")
                         mapping_status_combo.setCurrentText("N")  # 默认设置为N
                         continue  # 跳过当前循环
                     mapping_status_combo.setCurrentText(mapping_status)
@@ -1437,12 +1482,12 @@ class DataProcessingTool(QMainWindow):
                 except Exception as e:
                     return (0, f"处理第{row}行配置时出错: {str(e)}")
             
-            print(f"当前行数为：{inspect.currentframe().f_lineno}，restore_current_data成功")
+            self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno}，restore_current_data成功")
             return (1, "数据恢复成功")
     
         except Exception as e:
             error_msg = f"恢复数据失败: {str(e)}"
-            print(error_msg)
+            self.file_operator.logger.info(error_msg)
             return (0, error_msg)
 
     def One_click_clear(self):
@@ -1472,6 +1517,10 @@ class DataProcessingTool(QMainWindow):
         # 清空文件选择器
         self.file1_selector.set_file_path(None)
         self.file2_selector.set_file_path(None)
+        # 清空当前任务编辑框
+        self.current_task_edit.clear()
+        self.result_text_edit.clear()
+
         self.wb1 = None
         self.wb2 = None
 
@@ -1482,26 +1531,26 @@ class DataProcessingTool(QMainWindow):
         if up_or_down == 0:
             status, error = self.file_operator.open_excel_file(self.output_file_path1)
             if status == 0:
-                self.error_occurred.emit("WARNING", error, None)
+                self.signal_list.error_occurred.emit("WARNING", error, None)
                 return False, error
-            print(f"成功打开Excel文件1: {self.output_file_path1}")
+            self.file_operator.logger.info(f"成功打开Excel文件1: {self.output_file_path1}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件1: {self.output_file_path1}")
         elif up_or_down == 1:
             status, error = self.file_operator.open_excel_file(self.output_file_path2)
             if status == 0:
-                self.error_occurred.emit("WARNING", error, None)
+                self.signal_list.error_occurred.emit("WARNING", error, None)
                 return False, error
-            print(f"成功打开Excel文件2: {self.output_file_path2}")
+            self.file_operator.logger.info(f"成功打开Excel文件2: {self.output_file_path2}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件2: {self.output_file_path2}")
         else:
-            print("未知错误")
+            self.file_operator.logger.info("未知错误")
             return False
         return True
     
     def open_log_file(self):
         status, error = self.file_operator.open_text_file(compare_info_file_path)
         if not status:
-            self.error_occurred.emit("WARNING", error, None)
+            self.signal_list.error_occurred.emit("WARNING", error, None)
             return False
         self.current_task_edit.appendPlainText(f"成功打开log文件: {compare_info_file_path}")
         return True
@@ -1659,7 +1708,7 @@ class DataProcessingTool(QMainWindow):
         table.verticalHeader().setVisible(False)  # 隐藏垂直表头
         # 设置表格的最小和最大高度为相同值，实现固定高度
         table.setMinimumHeight(self.table_heigh)
-        print("table.setFixedHeight(self.table_heigh)")
+        self.file_operator.logger.info("table.setFixedHeight(self.table_heigh)")
 
     def init_table_row(self, table, row):
         """初始化表格行"""
@@ -1770,7 +1819,7 @@ class DataProcessingTool(QMainWindow):
         sheet2_name = table.cellWidget(row, 1).currentText()
         title_rows_number = table.cellWidget(row, self.title_rows).value()
         self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
-        print(f"self.title_list = {self.title_list}")
+        self.file_operator.logger.info(f"self.title_list = {self.title_list}")
         # string_list_model = QStringListModel(self.title_list)
         for col in range(self.index_col_position[0], self.index_col_position[1]+1):
             combo = table.cellWidget(row, col)
@@ -1788,12 +1837,12 @@ class DataProcessingTool(QMainWindow):
         title_list = []
         for value1 in title_row_values1:
             for value2 in title_row_values2:
-                # print(f"value1 = {value1}, value2 = {value2}")
+                # self.file_operator.logger.info(f"value1 = {value1}, value2 = {value2}")
                 if str(value1) == str(value2) and str(value1) and value1 != None:
                     title_list.append(str(value1))
                     break
 
-        print(f"title_list = {title_list}")
+        self.file_operator.logger.info(f"title_list = {title_list}")
         return title_list
     
     def mapping_status_changed(self, table, row):
@@ -1808,8 +1857,8 @@ class DataProcessingTool(QMainWindow):
             # 获取index列的选项卡list
             sheet1_name = table.cellWidget(row, 0).currentText()
             sheet2_name = table.cellWidget(row, 1).currentText()
-            print(f"sheet1_name ={sheet1_name}")
-            print(f"sheet2_name ={sheet2_name}")
+            self.file_operator.logger.info(f"sheet1_name ={sheet1_name}")
+            self.file_operator.logger.info(f"sheet2_name ={sheet2_name}")
             if sheet1_name and sheet2_name:
                 #获取标题行数
                 title_rows_number = header_spin.value()
@@ -1879,11 +1928,8 @@ class DataProcessingTool(QMainWindow):
         self.button_up.setEnabled(complete_flag == "success")
         self.button_down.setEnabled(complete_flag == "success")
         self.button_log.setEnabled(complete_flag == "success")
-        print(f"bool(complete_flag) = {(complete_flag)}")
-        # if complete_flag == "success":
-        #     if not FileHandler.append_text_content(compare_info_file_path, "\n"+self.current_task_edit.toPlainText()):
-        #         self.current_task_edit.appendPlainText(f"{compare_info_file_path}文件追加错误")
-
+        self.file_operator.logger.info(f"bool(complete_flag) = {(complete_flag)}")
+        self.signal_list.disconnect_signals()
 
     def add_addItems_for_combo(self, row_number, table, column, Option_value_list):
         """给table的列添加选项值"""
@@ -1918,12 +1964,12 @@ class DataProcessingTool(QMainWindow):
             try:
                 selector.set_file_path(file_path)
                 wb, error_msg = DataProcessor.open_file(file_path, True)
-                print("ValueError(error_msg)1")
+                self.file_operator.logger.info("ValueError(error_msg)1")
                 if wb is None:
                     ValueError(error_msg)
-                    print("ValueError(error_msg)2")
-                print("ValueError(error_msg)3")
-                print(f"wb.sheetnames = {wb.sheetnames}")
+                    self.file_operator.logger.info("ValueError(error_msg)2")
+                self.file_operator.logger.info("ValueError(error_msg)3")
+                self.file_operator.logger.info(f"wb.sheetnames = {wb.sheetnames}")
                 if selector == self.file1_selector:
                     self.wb1 = wb
                     self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
@@ -1937,7 +1983,7 @@ class DataProcessingTool(QMainWindow):
                     pass
             except Exception as e:
                 self.current_task_edit.appendPlainText(f"无法打开文件: {file_path}\n{str(e)}")
-                print(f"无法打开文件: {file_path}\n{str(e)}")
+                self.file_operator.logger.info(f"无法打开文件: {file_path}\n{str(e)}")
                 error = f"无法打开文件: {file_path}\n{str(e)}"
                 QMessageBox.warning(self, "处理失败", error)
                 return 0
@@ -1978,15 +2024,15 @@ class DataProcessingTool(QMainWindow):
             self.start_btn.setEnabled(False)
             self.start_btn.setText("停止处理")
             self.start_btn.setEnabled(True)
-            print(f"当前行数为：{inspect.currentframe().f_lineno}, Button set to Stop Button.")
+            self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno}, Button set to Stop Button.")
         elif status == "开始处理":
             self.start_flag = True
             self.start_btn.setEnabled(False)
             self.start_btn.setText("开始处理")
             self.start_btn.setEnabled(True)
-            print(f"当前行数为：{inspect.currentframe().f_lineno}, set to Start Button.")
+            self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno}, set to Start Button.")
         else:
-            print(f"当前行数为：{inspect.currentframe().f_lineno}, set_button_status status input error, Start or Stop?")
+            self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno}, set_button_status status input error, Start or Stop?")
             return 0
         return 1
 
@@ -2001,7 +2047,7 @@ class DataProcessingTool(QMainWindow):
             error = "无法确定当前配置表格"
             QMessageBox.critical(self, "处理失败", error)
             return 0
-        print(f"当前行数为：{inspect.currentframe().f_lineno} start_processing")
+        self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} start_processing")
         
         # 收集配置数据
         config_data = []
@@ -2019,7 +2065,7 @@ class DataProcessingTool(QMainWindow):
                 else:
                     row_data.append("")
             config_data.append(row_data)
-        print(f"当前行数为：{inspect.currentframe().f_lineno} start_processing")
+        self.file_operator.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} start_processing")
         
         # 验证必要字段
         valid = False
@@ -2052,7 +2098,7 @@ class DataProcessingTool(QMainWindow):
             error = f"文件2-sheet列中存在重复元素 {duplicates2} "
             QMessageBox.critical(self, "处理失败", error)
             return 0
-        print(f"config_data = {config_data}")
+        self.file_operator.logger.info(f"config_data = {config_data}")
         if not valid:
             error = textwrap.dedent('''
                 请确保至少一行配置完整:
@@ -2074,15 +2120,18 @@ class DataProcessingTool(QMainWindow):
         self.processor = DataProcessor(
             self.file1_selector.get_file_path(),
             self.file2_selector.get_file_path(),
-            config_data
+            config_data,
+            self.signal_list
         )
         
-        self.processor.progress_updated.connect(self.update_progress)
-        self.processor.result_text_edit.connect(self.show_result)
-        self.processor.error_occurred.connect(self.show_error)
-        self.processor.comparison_finished.connect(self.on_comparison_finished)
-        self.processor.progress_current_task.connect(self.current_task_edit.appendPlainText)
-        self.processor.progress_current_task.connect(self.file_operator.logger.info)
+        self.signal_list.progress_updated.connect(self.update_progress)
+        self.signal_list.result_text_edit.connect(self.show_result)
+        self.signal_list.error_occurred.connect(self.show_error)
+        self.signal_list.comparison_finished.connect(self.on_comparison_finished)
+        self.signal_list.progress_current_task.connect(self.current_task_edit.appendPlainText)
+        self.signal_list.progress_current_task.connect(self.file_operator.logger.info)
+        self.signal_list.output_logger.connect(self.file_operator.logger.info)
+
         
         self.processor.finished.connect(self.processing_finished)
         self.processor.start()
@@ -2131,7 +2180,7 @@ class DataProcessingTool(QMainWindow):
             # 其他类型的错误，显示为红色
             self.result_text_edit.setHtml(f"<font color='red'>{error}</font>")
             QMessageBox.critical(self, "处理错误", error)
-        print(f"信息类型: {type} : {error}")
+        self.file_operator.logger.info(f"信息类型: {type} : {error}")
     def processing_finished(self):
         """处理完成后的清理工作"""
         self.start_btn.setEnabled(True)
@@ -2181,7 +2230,7 @@ class InitialScreen(QWidget):
             # 尝试加载原始图片（如果修复后的图片不存在）
             self.background_pixmap = QPixmap(resource_path("ICO/GUI_ICO2.png"))
             if self.background_pixmap.isNull():
-                print("警告：背景图片加载失败")
+                self.file_operator.logger.info("警告：背景图片加载失败")
     
     def setup_ui(self):
         # 设置窗口标题和大小
@@ -2262,20 +2311,20 @@ class InitialScreen(QWidget):
             error_label.setGeometry(0, 0, self.width(), self.height())
     # @staticmethod
     # def license_verify(license_file_path):
-    #     print("开始许可证验证")
+    #     self.file_operator.logger.info("开始许可证验证")
     #     verify_app = DeviceIDLicenseVerify(license_file_path)
     #     if not verify_app.verify_license():
-    #         print("=" * 40)
-    #         print("授权验证失败，程序无法继续运行。")
-    #         print("请联系开发者获取有效的授权文件。")
+    #         self.file_operator.logger.info("=" * 40)
+    #         self.file_operator.logger.info("授权验证失败，程序无法继续运行。")
+    #         self.file_operator.logger.info("请联系开发者获取有效的授权文件。")
     #         sys.exit(1)
     #         return 0
         
     #     # 授权通过，运行主程序
-    #     print("=" * 40)
-    #     print("Hello World!")
-    #     print("这是一个经过授权的程序。")
-    #     print("=" * 40)
+    #     self.file_operator.logger.info("=" * 40)
+    #     self.file_operator.logger.info("Hello World!")
+    #     self.file_operator.logger.info("这是一个经过授权的程序。")
+    #     self.file_operator.logger.info("=" * 40)
     #     return 1
     
     def on_start_clicked(self):
@@ -2316,7 +2365,7 @@ try:
     window.init_ui()
     window.restore_data()
     # 确保应用程序退出时返回正确的状态码
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 except Exception as e:

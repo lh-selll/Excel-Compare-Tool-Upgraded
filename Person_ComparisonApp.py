@@ -32,7 +32,7 @@ from openpyxl.cell.text import InlineFont
 class Person_ComparisonApp:
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
     # 类的构造函数，用于初始化对象的属性
-    def __init__(self, progress_updated, progress_current_task, comparison_finished, error_occurred, output_path=None):
+    def __init__(self, signal_list, output_path=None):
         """
         Excel对比应用核心类，负责执行表格对比逻辑
         
@@ -42,10 +42,13 @@ class Person_ComparisonApp:
             comparison_finished: 对比完成信号，用于通知UI对比结束
             output_path: 输出文件路径（可选）
         """
-        self.progress_updated       = progress_updated      #用于更新当前进度的信号槽，比如：self.progress_updated(xxx)返回当前进度%
-        self.progress_current_task  = progress_current_task #用于更新当前正在进行的task名称，比如：第x行正在对比
-        self.comparison_finished    = comparison_finished   #用于返回当前进程已终止，原因：“被用户手动停止”
-        self.error_occurred = error_occurred                #用于返回错误信息，原因：“被用户手动停止”或“发生未知错误”
+        self.progress_updated       = signal_list.progress_updated         #用于更新当前进度的信号槽，比如：self.progress_updated(xxx)返回当前进度%
+        self.progress_current_task  = signal_list.progress_current_task    #用于更新当前正在进行的task名称，比如：第x行正在对比   ，用于显示当前处理任务
+        self.comparison_finished    = signal_list.comparison_finished      #用于返回当前进程已终止，原因：“被用户手动停止”    ，用于通知UI对比结束
+        self.error_occurred         = signal_list.error_occurred           #用于返回错误信息，原因：“被用户手动停止”或“发生未知错误”  ，用于返回错误信息
+        self.logger_info            = signal_list.output_logger              #用于返回日志信息，用于记录对比过程中的信息
+
+
         self.output_path = output_path                    # 输出文件路径
         self.Progress_percent = 0                         # 当前进度百分比
         self.Agreed_color = "AFFFAF"  # 一致时填充色（浅绿色）
@@ -98,13 +101,13 @@ class Person_ComparisonApp:
                 blank_row_count += 1
                 if blank_row_count >= 20:
                     print_info = f"连续20行索引列值为空，结束sheet【{sheet.title}】的检查"
-                    print(print_info)
+                    self.logger_info.emit(print_info)
                     self.progress_current_task.emit(print_info)
                     break
                 continue
             else:
                 blank_row_count = 0
-            # print(f"当前行数为：{inspect.currentframe().f_lineno}，check_index_repeat")
+            # self.logger_info.emit(f"当前行数为：{inspect.currentframe().f_lineno}，check_index_repeat")
             
             # 检查重复值
             if merged_text in merged_values:
@@ -231,7 +234,7 @@ class Person_ComparisonApp:
                 for col1 in range(col_min, col_max+1):
                     if self.check_thread_running():
                         return 0, None
-                    # print(f"当前行数为：{inspect.currentframe().f_lineno} row = {row1}")
+                    # self.logger_info.emit(f"当前行数为：{inspect.currentframe().f_lineno} row = {row1}")
                     if not(row1 == row_min and col1 == col_min):
                         # 计算相对位置
                         index_row = row1 - row_min
@@ -272,17 +275,17 @@ class Person_ComparisonApp:
                 wb = openpyxl.load_workbook(file_path, read_only=True)
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
-            print(error)
+            self.logger_info.emit(error)
             self.error_occurred.emit("WARNING", error, None)
             return 0, None
         except openpyxl.utils.exceptions.InvalidFileException:
             error = f"文件 {file_path} 不是有效的 Excel 文件, 请重新输入"
-            print(error)
+            self.logger_info.emit(error)
             self.error_occurred.emit("WARNING", error, None)
             return 0, None
         except Exception as e:
             error = f"发生了未知错误：{e}"
-            print(error)
+            self.logger_info.emit(error)
             self.error_occurred.emit("WARNING", error, None)
             return 0, None
         return wb
@@ -385,7 +388,7 @@ class Person_ComparisonApp:
             0: 任务被终止
         """
         self.result_info = "" #清空上次对比结果信息
-        print(f"直接对比: sheet_name = {sheet1.title}")
+        self.logger_info.emit(f"直接对比: sheet_name = {sheet1.title}")
         self.clear_all_conditional_formatting(sheet1)
         row_changed_list = {}
         
@@ -459,7 +462,7 @@ class Person_ComparisonApp:
                 blank_row_flag += 1
                 if blank_row_flag >= 20:
                     print_info = f"连续20行全部值为空，结束sheet【{sheet1.title}】的对比\n"
-                    print(print_info)
+                    self.logger_info.emit(print_info)
                     self.progress_current_task.emit(print_info)
                     break
             else:
@@ -473,7 +476,7 @@ class Person_ComparisonApp:
         变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
         """)
         self.progress_updated.emit(target_progress)
-        return sheet1
+        return sheet1, None
     
     def compare_excel_sheet_by_index(
         self, 
@@ -533,7 +536,7 @@ class Person_ComparisonApp:
         
         check_index_time = time.time()
         check_index_time_output = f"索引检查耗时: {check_index_time - start_time}s"
-        print(check_index_time_output)
+        self.logger_info.emit(check_index_time_output)
         
         # --------------------- 合并单元格处理 --------------------- #
         self.progress_current_task.emit(f"正在拆分sheet【{sheet1.title}】合并单元格")
@@ -544,7 +547,7 @@ class Person_ComparisonApp:
         
         split_time = time.time()
         split_time_output = f"合并单元格拆分处理耗时: {split_time - check_index_time}s"
-        print(split_time_output)
+        self.logger_info.emit(split_time_output)
         
         # --------------------- 行映射建立 --------------------- #
         self.progress_current_task.emit(f"正在建立sheet【{sheet1.title}】行映射关系")
@@ -561,7 +564,7 @@ class Person_ComparisonApp:
 
         row_mapping_time = time.time()
         row_mapping_time_output = f"行映射建立耗时: {row_mapping_time - split_time}s"
-        print(row_mapping_time_output)
+        self.logger_info.emit(row_mapping_time_output)
         
         # --------------------- 单元格对比 --------------------- #
         self.progress_current_task.emit(f"开始对比sheet【{sheet1.title}】单元格")
@@ -614,7 +617,7 @@ class Person_ComparisonApp:
         self.create_row_changed_rows(sheet1, row_changed_list)
         end_time = time.time()
         end_time_output = f"单元格对比耗时: {end_time - row_mapping_time}s"
-        print(end_time_output)
+        self.logger_info.emit(end_time_output)
         
         # 创建新增行数据sheet
         if sum(1 for v in row_changed_list.values() if v == 3):
@@ -706,7 +709,7 @@ class Person_ComparisonApp:
                 if blank_row_count >= 20:
                     col_mapping[col1] = 0
                     print_info = f"连续20列标题为空，结束sheet标题行的匹配"
-                    print(print_info)
+                    self.logger_info.emit(print_info)
                     self.progress_current_task.emit(print_info)
                     break
                     
@@ -813,7 +816,7 @@ class Person_ComparisonApp:
                 if blank_row_count >= 20:
                     row_mapping[row1] = 0
                     print_info = f"连续20行索引列值为空，结束sheet【{sheet1.title}】的匹配"
-                    print(print_info)
+                    self.logger_info.emit(print_info)
                     self.progress_current_task.emit(print_info)
                     for row in range(row1-19, row1+1):
                         row_mapping.pop(row, None)
@@ -882,7 +885,7 @@ class Person_ComparisonApp:
         
         # 筛选出值为0的所有键
         zero_indices = {k: v for k, v in row_changed_list.items() if v == 3}
-        print(f"zero_keys = {zero_indices}------------------------------")
+        self.logger_info.emit(f"zero_keys = {zero_indices}------------------------------")
 
         
         # 4. 写入新增行数据
@@ -987,7 +990,7 @@ class Person_ComparisonApp:
         
         duplicates_time = time.time()
         duplicates_time_output = f"标题行检查耗时: {duplicates_time - start_time}s"
-        print(duplicates_time_output)
+        self.logger_info.emit(duplicates_time_output)
         
         # --------------------- 索引列定位 --------------------- #
         self.progress_current_task.emit("正在定位索引列位置 (name -> value)")
@@ -1004,7 +1007,7 @@ class Person_ComparisonApp:
             index_value_list_file1.append(index_value1 + 1)
             index_value_list_file2.append(index_value2 + 1)
         
-        print(f"文件1索引列: {index_value_list_file1}, 文件2索引列: {index_value_list_file2}")
+        self.logger_info.emit(f"文件1索引列: {index_value_list_file1}, 文件2索引列: {index_value_list_file2}")
         
         # --------------------- 索引列重复检查 --------------------- #
         self.progress_current_task.emit("正在检查索引列是否存在重复值")
@@ -1015,7 +1018,7 @@ class Person_ComparisonApp:
         
         check_index_time = time.time()
         check_index_time_output = f"索引检查耗时: {check_index_time - duplicates_time}s"
-        print(check_index_time_output)
+        self.logger_info.emit(check_index_time_output)
         
         # --------------------- 合并单元格处理 --------------------- #
         self.progress_current_task.emit("正在拆分合并单元格")
@@ -1026,7 +1029,7 @@ class Person_ComparisonApp:
         
         split_time = time.time()
         split_time_output = f"合并单元格拆分处理耗时: {split_time - check_index_time}s"
-        print(split_time_output)
+        self.logger_info.emit(split_time_output)
         
         # --------------------- 行映射 --------------------- #
         self.progress_current_task.emit("正在建立行映射关系")
@@ -1043,7 +1046,7 @@ class Person_ComparisonApp:
         step_progress = delta_progress / len(index_column_mapping) if len(index_column_mapping) > 0 else 0
         row_mapping_time = time.time()
         row_mapping_time_output = f"行映射建立耗时: {row_mapping_time - split_time}s"
-        print(row_mapping_time_output)
+        self.logger_info.emit(row_mapping_time_output)
         
         # --------------------- 列映射 --------------------- #
         self.progress_current_task.emit("正在建立列映射关系")
@@ -1053,7 +1056,7 @@ class Person_ComparisonApp:
         
         col_mapping_time = time.time()
         col_mapping_time_output = f"列映射耗时: {col_mapping_time - row_mapping_time}s"
-        print(col_mapping_time_output)
+        self.logger_info.emit(col_mapping_time_output)
         
         # --------------------- 单元格对比 --------------------- #
         self.progress_current_task.emit("开始单元格对比")
@@ -1104,7 +1107,7 @@ class Person_ComparisonApp:
         self.create_row_changed_rows(sheet1, row_changed_list, title_row_number)
         end_time = time.time()
         end_time_output = f"单元格对比耗时: {end_time - col_mapping_time}s"
-        print(end_time_output)
+        self.logger_info.emit(end_time_output)
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
@@ -1228,10 +1231,10 @@ class Person_ComparisonApp:
         """
         # 保存第一个工作簿，此时已包含对比和填充颜色后的结果
         try:
-            print(f"saving file")
+            self.logger_info.emit(f"saving file")
             self.progress_current_task.emit(f"对比完成，文件保存中···")
             wb1.save(output_path)
-            print(f"file saved")
+            self.logger_info.emit(f"file saved")
         except Exception as e:
             if isinstance(e, PermissionError):
                 error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
@@ -1249,7 +1252,7 @@ class Person_ComparisonApp:
                     error = f"没有权限创建文件夹 {output_path}。"
             else:
                 error = f"保存文件时出现未知错误：{str(e)}"
-            print(error)
+            self.logger_info.emit(error)
             self.error_occurred.emit("WARNING", error, None)
             self.Progress_percent = 0
             self.progress_current_task.emit(f"对比完成，File1保存成功")
@@ -1289,14 +1292,14 @@ class Person_ComparisonApp:
             if last_valid_row > 0 and last_valid_row < sheet.max_row:
                 delete_count = sheet.max_row - last_valid_row
                 sheet.delete_rows(last_valid_row + 1, delete_count)
-                print(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+                self.logger_info.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
                 self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
             else:
-                print(f"工作表 '{sheet.title}' 无底部空行需要删除")
+                self.logger_info.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
                 self.progress_current_task.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
             return 1, None
         except Exception as e:
-            print(f"Error: {e}") 
+            self.logger_info.emit(f"Error: {e}") 
             return 0, e
         
     def merge_sheet_to_another(self, source_sheet, target_sheet, skip_header=False):
@@ -1314,6 +1317,9 @@ class Person_ComparisonApp:
         
         # 遍历源工作表的所有行（row是一个单元格对象的元组）
         for row_idx, row in enumerate(source_sheet.iter_rows(values_only=False), start=1):
+            # 检查任务是否被终止
+            if self.check_thread_running():
+                return 0
             # 如果需要跳过表头，且当前是第一行，则跳过
             if skip_header and row_idx == 1:
                 continue
@@ -1333,3 +1339,5 @@ class Person_ComparisonApp:
                 target_cell.fill = cell.fill.copy ()
                 target_cell.border = cell.border.copy ()
                 target_cell.alignment = cell.alignment.copy ()
+        
+        return 1
