@@ -71,7 +71,7 @@ class BorderStyle:
 class ExcelChartManager:
     """Excel图表管理类，支持创建、配置和插入多种图表"""
     
-    def __init__(self, workbook=None):
+    def __init__(self, workbook=None, is_running=True):
         """初始化图表管理器"""
         self.workbook = workbook if workbook else Workbook()
         self.current_sheet = self.workbook.active  # 默认使用当前活跃工作表
@@ -395,7 +395,7 @@ class ExcelChartManager:
         return self
     
     @staticmethod
-    def create_referencec_data(sheet, labels_col, data_col, min_row, max_row):
+    def create_reference_data(sheet, labels_col, data_col, min_row, max_row):
 
         """创建饼图数据范围"""
         # 定义饼图标签范围

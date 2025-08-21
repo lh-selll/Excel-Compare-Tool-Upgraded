@@ -32,7 +32,7 @@ from openpyxl.cell.text import InlineFont
 class Person_ComparisonApp:
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
     # 类的构造函数，用于初始化对象的属性
-    def __init__(self, progress_updated, progress_current_task, comparison_finished, output_path=None):
+    def __init__(self, progress_updated, progress_current_task, comparison_finished, error_occurred, output_path=None):
         """
         Excel对比应用核心类，负责执行表格对比逻辑
         
@@ -45,6 +45,7 @@ class Person_ComparisonApp:
         self.progress_updated       = progress_updated      #用于更新当前进度的信号槽，比如：self.progress_updated(xxx)返回当前进度%
         self.progress_current_task  = progress_current_task #用于更新当前正在进行的task名称，比如：第x行正在对比
         self.comparison_finished    = comparison_finished   #用于返回当前进程已终止，原因：“被用户手动停止”
+        self.error_occurred = error_occurred                #用于返回错误信息，原因：“被用户手动停止”或“发生未知错误”
         self.output_path = output_path                    # 输出文件路径
         self.Progress_percent = 0                         # 当前进度百分比
         self.Agreed_color = "AFFFAF"  # 一致时填充色（浅绿色）
@@ -272,17 +273,17 @@ class Person_ComparisonApp:
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
             print(error)
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             return 0, None
         except openpyxl.utils.exceptions.InvalidFileException:
             error = f"文件 {file_path} 不是有效的 Excel 文件, 请重新输入"
             print(error)
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             return 0, None
         except Exception as e:
             error = f"发生了未知错误：{e}"
             print(error)
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             return 0, None
         return wb
     
@@ -1249,7 +1250,7 @@ class Person_ComparisonApp:
             else:
                 error = f"保存文件时出现未知错误：{str(e)}"
             print(error)
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             self.Progress_percent = 0
             self.progress_current_task.emit(f"对比完成，File1保存成功")
             return 0, None

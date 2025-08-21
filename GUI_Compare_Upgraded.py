@@ -30,13 +30,13 @@ from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
 
 from Person_ComparisonApp import Person_ComparisonApp
-from Deviceid_license_verify import DeviceIDLicenseVerify
+# from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 
 output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
-license_file_path = '.\\license\\license.key'
+# license_file_path = '.\\license\\license.key'
 compare_info_file_path = '.\\result.log'
 log_file_path = '.\\log\\processor.log'
 
@@ -245,7 +245,8 @@ class DataProcessor(QThread):
     result_text_edit = Signal(str)              # 结果准备好信号
     progress_current_task = Signal(str)     # 当前任务进度信号
     comparison_finished = Signal(str)       # 对比完成信号
-    error_occurred = Signal(str)            # 错误发生信号
+    error_occurred = Signal (str, str, object)            # 错误发生信号，带返回值
+    return_value = None      # 错误发生弹窗后的返回值
     is_running = True                           # 线程运行状态
 
     def __init__(self, file1_path, file2_path, config_data, parent=None):
@@ -255,7 +256,7 @@ class DataProcessor(QThread):
         self.config_data = config_data          # 配置数据
         self.canceled = False                   # 取消标志
         self.index_col_position = [2, 4]         # 索引列位置范围
-        self.CompareApp = Person_ComparisonApp(self.progress_updated, self.progress_current_task, self.comparison_finished)
+        self.CompareApp = Person_ComparisonApp(self.progress_updated, self.progress_current_task, self.comparison_finished, self.error_occurred, self.result_text_edit)
         self.colors = [self.CompareApp.Agreed_color, self.CompareApp.Not_Agreed_color, self.CompareApp.No_match_color, self.CompareApp.Delete_color]
 
         self.Thread_start_time = time.time()
@@ -385,6 +386,8 @@ class DataProcessor(QThread):
 
             compare_type = 0
             for row_data in results_data:
+                if not self.is_running:
+                    raise ValueError("用户终止对比进程")
                 wb1_sheet = wb1[row_data.sheet1_name]
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
                 if not status:
@@ -523,9 +526,11 @@ class DataProcessor(QThread):
             self.progress_current_task.emit("开始创建图表")
             # 创建所有图表
             for index, chart_data in enumerate(self.chart_data_container_list):
+                if not self.is_running:
+                    raise ValueError("用户终止对比进程")
                 if index%2 == 0:
                     # 创建图表数据引用
-                    wb1_labels_range, wb1_data_range = ExcelChartManager.create_referencec_data(
+                    wb1_labels_range, wb1_data_range = ExcelChartManager.create_reference_data(
                         self.wb1_chart_manager.current_sheet, 
                         chart_data.data_range.labels_min_col,
                         chart_data.data_range.data_min_col,
@@ -534,7 +539,7 @@ class DataProcessor(QThread):
                     )
                     self.create_chart(self.wb1_chart_manager.current_sheet, chart_data.chart_name, wb1_labels_range, wb1_data_range, chart_data.data_range.max_row+2, chart_data.data_range.labels_min_col, chart_data.colors)
                     
-                    wb2_labels_range, wb2_data_range = ExcelChartManager.create_referencec_data(
+                    wb2_labels_range, wb2_data_range = ExcelChartManager.create_reference_data(
                         self.wb2_chart_manager.current_sheet, 
                         chart_data.data_range.labels_min_col,
                         chart_data.data_range.data_min_col,
@@ -548,7 +553,6 @@ class DataProcessor(QThread):
             self.progress_current_task.emit("完成创建图表")
             
             compare_compeleted_time = time.time()
-            self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             self.progress_updated.emit(90)
             self.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             # 保存对比结果
@@ -559,7 +563,6 @@ class DataProcessor(QThread):
             if self.saving_file(wb2, output_path2):
                 self.progress_current_task.emit("File2保存成功")
                 self.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
-            self.progress_current_task.emit("成功保存所有文档")
             wb1.close()
             wb2.close()
             saving_compeleted_time = time.time()
@@ -595,7 +598,9 @@ class DataProcessor(QThread):
             formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
             self.progress_current_task.emit(f"结束时间：{formatted_time}")
             self.progress_current_task.emit("/*************************************************结束任务*******************************************************/")
-            ctypes.windll.user32.MessageBoxW(None, f"对比完成，输出文件在“{output_path}”文件夹中", "成功信息", 0x00000040)
+            # ctypes.windll.user32.MessageBoxW(None, f"对比完成，输出文件在“{output_path}”文件夹中", "成功信息", 0x00000040)
+            success = f"对比完成，输出文件在“{output_path}”文件夹中"
+            self.error_occurred.emit("SUCCESS", success, None)
             fileappend_content = FileHandler.read_text_file(log_file_path)
 
             if fileappend_content is None:
@@ -604,7 +609,7 @@ class DataProcessor(QThread):
             FileHandler.append_text_content(compare_info_file_path, "\n\n对比进程信息：\n\n"+fileappend_content)
 
         except Exception as e:
-            self.error_occurred.emit(f"处理失败: {str(e)}")
+            self.error_occurred.emit("ERROR", f"处理失败: {str(e)}", None)
             self.comparison_finished.emit("failed")
             wb1 = None
             wb2 = None
@@ -657,6 +662,7 @@ class DataProcessor(QThread):
     def stop(self):
         """停止对比进程"""
         self.CompareApp.is_running = False
+        self.is_running = False
 
     def get_index_by_ColHeader(self, ColumnHeader):
         """将列字母转换为列号（如C->3）"""
@@ -671,7 +677,7 @@ class DataProcessor(QThread):
         except ValueError:
             error = f"get_index_by_ColHeader 失败"
             print(error)
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             return 0
 
     @staticmethod
@@ -749,58 +755,66 @@ class DataProcessor(QThread):
 
     def saving_file(self, wb, output_path):
         """保存Excel文件"""
-        try:
-            # 根据文件扩展名选择保存方式
-            ext = os.path.splitext(output_path)[1].lower()
+        flag = True
+        while(flag):
+            try:
+                # 根据文件扩展名选择保存方式
+                ext = os.path.splitext(output_path)[1].lower()
+                
+                if ext in ('.xlsx', '.xlsm', '.xls'):
+                    # 使用 openpyxl 保存
+                    wb.save(output_path)
+                
+                elif ext == '.csv':
+                    # 保存为 CSV（适合用 pandas 处理）
+                    import pandas as pd
+                    df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                    df.to_csv(output_path, index=False, header=False)
+                
+                print(f"文件保存成功: {output_path}")
+                return 1
+            except Exception as e:
+                print(e)
+                if isinstance(e, PermissionError):
+                    error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
+                elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
+                    error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
+                elif isinstance(e, FileNotFoundError):
+                    error = f"保存文件时文件路径不存在：{str(e)}"
+                    try:
+                        output_dir = os.path.dirname(output_path)
+                        os.mkdir(output_dir)
+                        error = f"文件夹 {output_dir} 创建成功。"
+                        # 根据文件扩展名选择保存方式
+                        ext = os.path.splitext(output_path)[1].lower()
+                        
+                        if ext in ('.xlsx', '.xlsm', '.xls'):
+                            # 使用 openpyxl 保存
+                            wb.save(output_path)
+                        
+                        elif ext == '.csv':
+                            # 保存为 CSV（适合用 pandas 处理）
+                            import pandas as pd
+                            df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                            df.to_csv(output_path, index=False, header=False)
+                        
+                        print(f"文件保存成功: {output_path}")
+                        return 1
+                    except FileExistsError:
+                        error = f"文件夹 {output_path} 已经存在。"
+                    except PermissionError:
+                        error = f"没有权限创建文件夹 {output_path}。"
+                else:
+                    error = f"保存文件时出现未知错误：{str(e)}"
+
+                print(error)
+                self.progress_current_task.emit(f"{error}")
+                # 保存失败，询问是否重试
+                self.error_occurred.emit("QUESTION", error, self)
+                self.exec()
+                if not self.return_value:
+                    raise ValueError(f"文件保存失败：{str(e)}")
             
-            if ext in ('.xlsx', '.xlsm', '.xls'):
-                # 使用 openpyxl 保存
-                wb.save(output_path)
-            
-            elif ext == '.csv':
-                # 保存为 CSV（适合用 pandas 处理）
-                import pandas as pd
-                df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
-                df.to_csv(output_path, index=False, header=False)
-            
-            print(f"文件保存成功: {output_path}")
-            return 1
-        except Exception as e:
-            if isinstance(e, PermissionError):
-                error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
-            elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
-                error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
-            elif isinstance(e, FileNotFoundError):
-                error = f"保存文件时文件路径不存在：{str(e)}"
-                try:
-                    output_dir = os.path.dirname(output_path)
-                    os.mkdir(output_dir)
-                    error = f"文件夹 {output_dir} 创建成功。"
-                    # 根据文件扩展名选择保存方式
-                    ext = os.path.splitext(output_path)[1].lower()
-                    
-                    if ext in ('.xlsx', '.xlsm', '.xls'):
-                        # 使用 openpyxl 保存
-                        wb.save(output_path)
-                    
-                    elif ext == '.csv':
-                        # 保存为 CSV（适合用 pandas 处理）
-                        import pandas as pd
-                        df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
-                        df.to_csv(output_path, index=False, header=False)
-                    
-                    print(f"文件保存成功: {output_path}")
-                    return 1
-                except FileExistsError:
-                    error = f"文件夹 {output_path} 已经存在。"
-                except PermissionError:
-                    error = f"没有权限创建文件夹 {output_path}。"
-            else:
-                error = f"保存文件时出现未知错误：{str(e)}"
-            print(error)
-            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            self.progress_current_task.emit(f"{error}")
-            raise ValueError(error)
     
 class DataProcessingTool(QMainWindow):
     """主应用程序窗口"""
@@ -1468,14 +1482,14 @@ class DataProcessingTool(QMainWindow):
         if up_or_down == 0:
             status, error = self.file_operator.open_excel_file(self.output_file_path1)
             if status == 0:
-                ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+                self.error_occurred.emit("WARNING", error, None)
                 return False, error
             print(f"成功打开Excel文件1: {self.output_file_path1}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件1: {self.output_file_path1}")
         elif up_or_down == 1:
             status, error = self.file_operator.open_excel_file(self.output_file_path2)
             if status == 0:
-                ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+                self.error_occurred.emit("WARNING", error, None)
                 return False, error
             print(f"成功打开Excel文件2: {self.output_file_path2}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件2: {self.output_file_path2}")
@@ -1487,7 +1501,7 @@ class DataProcessingTool(QMainWindow):
     def open_log_file(self):
         status, error = self.file_operator.open_text_file(compare_info_file_path)
         if not status:
-            ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            self.error_occurred.emit("WARNING", error, None)
             return False
         self.current_task_edit.appendPlainText(f"成功打开log文件: {compare_info_file_path}")
         return True
@@ -1924,7 +1938,8 @@ class DataProcessingTool(QMainWindow):
             except Exception as e:
                 self.current_task_edit.appendPlainText(f"无法打开文件: {file_path}\n{str(e)}")
                 print(f"无法打开文件: {file_path}\n{str(e)}")
-                QMessageBox.warning(self, "错误", f"无法打开文件: {file_path}\n{str(e)}")
+                error = f"无法打开文件: {file_path}\n{str(e)}"
+                QMessageBox.warning(self, "处理失败", error)
                 return 0
         
         self.button_up.setEnabled(0)
@@ -1983,7 +1998,8 @@ class DataProcessingTool(QMainWindow):
             current_table = self.Compare_Config_table
         
         if not current_table:
-            QMessageBox.warning(self, "错误", "无法确定当前配置表格")
+            error = "无法确定当前配置表格"
+            QMessageBox.critical(self, "处理失败", error)
             return 0
         print(f"当前行数为：{inspect.currentframe().f_lineno} start_processing")
         
@@ -2029,21 +2045,23 @@ class DataProcessingTool(QMainWindow):
         counter2 = Counter(unique_values2)
         duplicates2 = {element: count for element, count in counter2.items() if count > 1}
         if duplicates1:
-            QMessageBox.warning(self, "配置错误", f"文件1-sheet列中存在重复元素 {duplicates1} ")
+            error = f"文件1-sheet列中存在重复元素 {duplicates1} "
+            QMessageBox.critical(self, "处理失败", error)
             return 0
         if duplicates2:
-            QMessageBox.warning(self, "配置错误", f"文件2-sheet列中存在重复元素 {duplicates2} ")
+            error = f"文件2-sheet列中存在重复元素 {duplicates2} "
+            QMessageBox.critical(self, "处理失败", error)
             return 0
         print(f"config_data = {config_data}")
         if not valid:
-            QMessageBox.warning(
-                self, 
-                "配置错误", 
-                "请确保至少一行配置完整：\n"
-                "- 选择两个sheet名称\n"
-                "- 至少一个索引列/数据列\n"
-                "- 如果是mapping模式，表头行数需大于0"
+            error = textwrap.dedent('''
+                请确保至少一行配置完整:
+                - 选择两个sheet名称
+                - 至少一个索引列/数据列
+                - 如果是mapping模式，表头行数需大于0
+                '''
             )
+            QMessageBox.critical(self, "配置错误", error)
             return 0
         
         # 显示进度条
@@ -2083,11 +2101,37 @@ class DataProcessingTool(QMainWindow):
         """显示处理结果"""
         self.result_text_edit.setText(result)
 
-    def show_error(self, error):
+    def show_error(self, type, error, sub_thread):
         """显示错误信息"""
-        self.result_text_edit.setHtml(f"<font color='red'>{error}</font>")
-        QMessageBox.critical(self, "处理错误", error)
-
+        type = type.lower()
+        if type == "warning":
+            self.result_text_edit.setHtml(f"<font color='orange'>{error}</font>")
+            QMessageBox.warning(self, "处理警告", error)
+        elif type == "info":
+            self.result_text_edit.setHtml(f"<font color='blue'>{error}</font>")
+            QMessageBox.information(self, "处理信息", error)
+        elif type == "success":
+            # self.result_text_edit.setHtml(f"<font color='green'>{error}</font>")
+            QMessageBox.information(self, "处理成功", error)
+        elif type == "question":
+            self.result_text_edit.setHtml(f"<font color='purple'>{error}</font>")
+            # 保存失败，询问是否重试
+            reply = QMessageBox.question(
+                None, "保存失败", 
+                f"保存失败！\n错误原因：{error}\n\n是否重试？",
+                QMessageBox.Yes | QMessageBox.No,  # 提供Yes/No选项
+                QMessageBox.Yes  # 默认焦点在Yes按钮
+            )
+            
+            # 返回用户选择结果（True=重试，False=取消）
+            if sub_thread:
+                sub_thread.return_value = reply == QMessageBox.Yes
+                sub_thread.quit()
+        else:
+            # 其他类型的错误，显示为红色
+            self.result_text_edit.setHtml(f"<font color='red'>{error}</font>")
+            QMessageBox.critical(self, "处理错误", error)
+        print(f"信息类型: {type} : {error}")
     def processing_finished(self):
         """处理完成后的清理工作"""
         self.start_btn.setEnabled(True)
@@ -2216,31 +2260,31 @@ class InitialScreen(QWidget):
             error_label.setAlignment(Qt.AlignCenter)
             error_label.setStyleSheet("color: white; font-size: 16px;")
             error_label.setGeometry(0, 0, self.width(), self.height())
-    @staticmethod
-    def license_verify(license_file_path):
-        print("开始许可证验证")
-        verify_app = DeviceIDLicenseVerify(license_file_path)
-        if not verify_app.verify_license():
-            print("=" * 40)
-            print("授权验证失败，程序无法继续运行。")
-            print("请联系开发者获取有效的授权文件。")
-            sys.exit(1)
-            return 0
+    # @staticmethod
+    # def license_verify(license_file_path):
+    #     print("开始许可证验证")
+    #     verify_app = DeviceIDLicenseVerify(license_file_path)
+    #     if not verify_app.verify_license():
+    #         print("=" * 40)
+    #         print("授权验证失败，程序无法继续运行。")
+    #         print("请联系开发者获取有效的授权文件。")
+    #         sys.exit(1)
+    #         return 0
         
-        # 授权通过，运行主程序
-        print("=" * 40)
-        print("Hello World!")
-        print("这是一个经过授权的程序。")
-        print("=" * 40)
-        return 1
+    #     # 授权通过，运行主程序
+    #     print("=" * 40)
+    #     print("Hello World!")
+    #     print("这是一个经过授权的程序。")
+    #     print("=" * 40)
+    #     return 1
     
     def on_start_clicked(self):
         global license_file_path
         # 点击按钮后，显示主界面并关闭当前界面
         # 验证签名
-        if self.license_verify(license_file_path):
+        # if self.license_verify(license_file_path):
             # 打开主窗口
-            self.main_window.show()
+        self.main_window.show()
         
         # 关闭初始化窗口
         self.close()
@@ -2265,7 +2309,7 @@ try:
     window = DataProcessingTool()
     # initial_screen = InitialScreen(window)
     # initial_screen.show()
-    InitialScreen.license_verify(license_file_path)
+    # InitialScreen.license_verify(license_file_path)
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
     window.show()
