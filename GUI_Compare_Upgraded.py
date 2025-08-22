@@ -32,13 +32,13 @@ from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize, QObject
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
 
 from Person_ComparisonApp import Person_ComparisonApp
-# from Deviceid_license_verify import DeviceIDLicenseVerify
+from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 
 output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
-# license_file_path = '.\\license\\license.key'
+license_file_path = '.\\license\\license.key'
 compare_info_file_path = '.\\result.log'
 log_file_path = '.\\log\\processor.log'
 
@@ -2309,31 +2309,31 @@ class InitialScreen(QWidget):
             error_label.setAlignment(Qt.AlignCenter)
             error_label.setStyleSheet("color: white; font-size: 16px;")
             error_label.setGeometry(0, 0, self.width(), self.height())
-    # @staticmethod
-    # def license_verify(license_file_path):
-    #     self.file_operator.logger.info("开始许可证验证")
-    #     verify_app = DeviceIDLicenseVerify(license_file_path)
-    #     if not verify_app.verify_license():
-    #         self.file_operator.logger.info("=" * 40)
-    #         self.file_operator.logger.info("授权验证失败，程序无法继续运行。")
-    #         self.file_operator.logger.info("请联系开发者获取有效的授权文件。")
-    #         sys.exit(1)
-    #         return 0
+    @staticmethod
+    def license_verify(license_file_path):
+        print("开始许可证验证")
+        verify_app = DeviceIDLicenseVerify(license_file_path)
+        if not verify_app.verify_license():
+            print("=" * 40)
+            print("授权验证失败，程序无法继续运行。")
+            print("请联系开发者获取有效的授权文件。")
+            sys.exit(1)
+            return 0
         
-    #     # 授权通过，运行主程序
-    #     self.file_operator.logger.info("=" * 40)
-    #     self.file_operator.logger.info("Hello World!")
-    #     self.file_operator.logger.info("这是一个经过授权的程序。")
-    #     self.file_operator.logger.info("=" * 40)
-    #     return 1
+        # 授权通过，运行主程序
+        print("=" * 40)
+        print("Hello World!")
+        print("这是一个经过授权的程序。")
+        print("=" * 40)
+        return 1
     
     def on_start_clicked(self):
         global license_file_path
         # 点击按钮后，显示主界面并关闭当前界面
         # 验证签名
-        # if self.license_verify(license_file_path):
+        if self.license_verify(license_file_path):
             # 打开主窗口
-        self.main_window.show()
+            self.main_window.show()
         
         # 关闭初始化窗口
         self.close()
@@ -2358,7 +2358,7 @@ try:
     window = DataProcessingTool()
     # initial_screen = InitialScreen(window)
     # initial_screen.show()
-    # InitialScreen.license_verify(license_file_path)
+    InitialScreen.license_verify(license_file_path)
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
     window.show()
