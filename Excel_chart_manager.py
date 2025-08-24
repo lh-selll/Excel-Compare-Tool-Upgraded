@@ -186,7 +186,7 @@ class ExcelChartManager:
         :param column: 列号（从1开始，1=A列，2=B列...）
         :param value: 要添加的值
         """
-        self.logger_info.emit(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
+        # self.logger_info.info(f"row = {row}\ncolumn = {column}\nvalue_list = {value_list}")
         if border_style != None:
             if border_style == "thick":
                 border_style = self.border_style.borderthick_border
@@ -234,13 +234,11 @@ class ExcelChartManager:
         :param title_type: 标题类型，"main"为主要标题，"sub"为副标题
         """
         #添加chart_sheet的主标题
-        self.logger_info.emit(f"添加chart_sheet的主标题: row = {row}, col = {col}, height = {height}, width = {width}, content = {content}, title_type = {title_type}")
+        # self.logger_info.info(f"添加chart_sheet的主标题: row = {row}, col = {col}, height = {height}, width = {width}, content = {content}, title_type = {title_type}\n")
 
         self.current_sheet.merge_cells(start_row=row, start_column=col, end_row=row+height-1, end_column=col+width-1)
         if not self.add_cell_value(row, col, [[content]]):
             return 0
-
-        self.logger_info.emit(f"content = {content}")
         
         if title_type == "main":
             # 1. 设置行高
@@ -447,7 +445,7 @@ class ExcelChartManager:
         chart = PieChart()
         chart.title = title  # 直接使用字符串标题
         chart.style = 15
-        self.logger_info.emit(f"当前行数为：{inspect.currentframe().f_lineno} create_pie_chart, data_range = {data_range}")
+        # self.logger_info.info(f"当前行数为：{inspect.currentframe().f_lineno} create_pie_chart, data_range = {data_range}")
         
         # 添加数据系列
         series = Series(data_range, title_from_data=True)
@@ -465,7 +463,7 @@ class ExcelChartManager:
     def save(self, filename):
         """保存工作簿"""
         self.workbook.save(filename)
-        self.logger_info.emit(f"文件已保存：{filename}")
+        self.logger_info.info(f"文件完成添加图标，并已保存：{filename}")
 
 
 def main():

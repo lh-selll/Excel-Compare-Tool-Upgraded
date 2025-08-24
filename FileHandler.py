@@ -11,58 +11,58 @@ from logging.handlers import RotatingFileHandler
 class FileHandler:
     """文件操作工具类，封装常见的文件读写、管理功能"""
     
-    def __init__(self, log_file_path, verbose=False):
+    def __init__(self, logger, verbose=False):
         """初始化Excel文件打开器"""
-        self.log_file_path = log_file_path
+        self.logger = logger
         self.verbose = verbose
-        self.logger = self._setup_logger()
+        # self.logger = self._setup_logger()
         self.excel_valid_extensions = ['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv']
         self.text_valid_extensions = (
             '.txt', '.md', '.csv', '.log', '.py', 
             '.html', '.css', '.js', '.json', '.xml'
         )
         
-    def _setup_logger(self):
-        """配置日志器（包含文件输出）"""
-        logger = logging.getLogger("DataProcessor")
-        logger.setLevel(logging.DEBUG)
+    # def _setup_logger(self):
+    #     """配置日志器（包含文件输出）"""
+    #     logger = logging.getLogger("DataProcessor")
+    #     logger.setLevel(logging.DEBUG)
         
-        if logger.handlers:  # 避免重复添加处理器
-            return logger
+    #     if logger.handlers:  # 避免重复添加处理器
+    #         return logger
         
-        # 日志格式：时间 - 级别 - 模块:行号 - 消息
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
-        )
+    #     # 日志格式：时间 - 级别 - 模块:行号 - 消息
+    #     formatter = logging.Formatter(
+    #         "%(asctime)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s",
+    #         datefmt="%Y-%m-%d %H:%M:%S"
+    #     )
         
-        # 创建日志文件夹
-        log_dir = os.path.dirname(self.log_file_path)
-        log_file_name = os.path.basename(self.log_file_path)
-        os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, log_file_name)
-        print(f"log_file = {log_file}")
+    #     # 创建日志文件夹
+    #     log_dir = os.path.dirname(self.log_file_path)
+    #     log_file_name = os.path.basename(self.log_file_path)
+    #     os.makedirs(log_dir, exist_ok=True)
+    #     log_file = os.path.join(log_dir, log_file_name)
+    #     print(f"log_file = {log_file}")
 
         
-        # 文件处理器（日志写入文件，支持轮转）
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=3*1024*1024,  # 3MB 一个文件
-            backupCount=3,         # 保留3个备份
-            encoding="utf-8"
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
+    #     # 文件处理器（日志写入文件，支持轮转）
+    #     file_handler = RotatingFileHandler(
+    #         log_file,
+    #         maxBytes=3*1024*1024,  # 3MB 一个文件
+    #         backupCount=3,         # 保留3个备份
+    #         encoding="utf-8"
+    #     )
+    #     file_handler.setLevel(logging.DEBUG)
+    #     file_handler.setFormatter(formatter)
         
-        # 控制台处理器（同时在控制台输出）
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)  # 控制台只显示INFO及以上
-        console_handler.setFormatter(formatter)
+    #     # 控制台处理器（同时在控制台输出）
+    #     console_handler = logging.StreamHandler()
+    #     console_handler.setLevel(logging.INFO)  # 控制台只显示INFO及以上
+    #     console_handler.setFormatter(formatter)
         
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-        return logger
-    
+    #     logger.addHandler(file_handler)
+    #     logger.addHandler(console_handler)
+    #     return logger
+
     def validate_file_path(self, file_path, format):
         """验证文件路径是否有效"""
         path = Path(file_path)
