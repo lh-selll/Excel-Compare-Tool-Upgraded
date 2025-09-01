@@ -799,7 +799,7 @@ class DataProcessor(QThread):
                             )
                             # 替换所有NaN值为空字符串
                             df = df.fillna("")
-                            self.logger.info(f"成功读取文件，使用编码: {encoding}")
+                            print(f"成功读取文件，使用编码: {encoding}")
                             break
                         except UnicodeDecodeError:
                             if encoding == encodings[-1]:
@@ -827,7 +827,7 @@ class DataProcessor(QThread):
                 
         except FileNotFoundError:
             error = f"文件 {file_path} 不存在。"
-            self.logger.info(error)
+            print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return (None, error)
         except openpyxl.utils.exceptions.InvalidFileException:
