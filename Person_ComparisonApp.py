@@ -1333,40 +1333,6 @@ class Person_ComparisonApp:
         else:
             return 0
         
-    def delete_bottom_blank_rows(self, sheet):
-        """
-        删除工作表底部的空白行
-        返回值：1表示成功，0表示失败
-        """
-        try:
-            last_valid_row = 0
-                    
-            all_rows = list(sheet.iter_rows())  # 一次性获取所有行（仅创建一次迭代器）
-            for row in reversed(all_rows):  # 从最后一行开始反向遍历
-                # 检查任务是否被终止
-                if self.check_thread_running():
-                    return 0, "用户终止对比进程"
-                
-                # 检查当前行是否有有效数据
-                if any(cell.value is not None and str(cell.value).strip() != "" for cell in row):
-                    last_valid_row = row[0].row
-                    break  # 找到最后一个有效行，立即退出（无需继续遍历）
-
-            # 删除底部空行
-            if last_valid_row > 0 and last_valid_row < sheet.max_row:
-                delete_count = sheet.max_row - last_valid_row
-                sheet.delete_rows(last_valid_row + 1, delete_count)
-                self.logger.info(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
-                self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
-                self.logger.info(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
-            else:
-                self.logger.info(f"工作表 '{sheet.title}' 无底部空行需要删除")
-                self.progress_current_task.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
-                self.logger.info(f"工作表 '{sheet.title}' 无底部空行需要删除")
-            return 1, None
-        except Exception as e:
-            self.logger.info(f"Error: {e}") 
-            return 0, e
         
     def merge_sheet_to_another(self, source_sheet, target_sheet, skip_header=False):
         """
@@ -1410,3 +1376,82 @@ class Person_ComparisonApp:
                 target_cell.alignment = cell.alignment.copy ()
         
         return 1
+    
+
+    def has_valid_data(self, sheet, row):
+        """检查指定行是否有有效数据（非空且非空白字符串）"""
+        for cell in sheet[row]:
+            if self.check_thread_running():
+                return False
+            if cell.value is not None:
+                val_str = str(cell.value).strip()
+                if val_str != "":
+                    return True
+        return False
+    
+    def find_last_valid_row(self, sheet, threshold=2000, tail_check_limit=400):
+        """
+        动态选择查找方向，平衡有效行多和空行多的场景
+        :param sheet: openpyxl的Worksheet对象
+        :param threshold: 表格总行数阈值，低于此值从头部查找
+        :param tail_check_limit: 从尾部查找时的最大检查行数（避免无效遍历）
+        :return: 最后一个有效行的行号（无有效行时返回0）
+        """
+        max_row = sheet.max_row
+        if max_row == 0:
+            return 0  # 空表
+        
+        # 场景1：表格总行数较少（≤阈值），直接从头部遍历
+        if max_row <= threshold:
+            last_valid = 0
+            for row in range(1, max_row + 1):
+                if self.check_thread_running():
+                    return None
+                if self.has_valid_data(sheet, row):
+                    last_valid = row
+            return last_valid
+        
+        # 场景2：表格总行数较多（>阈值），先从尾部快速排查
+        # 从max_row向上检查最多tail_check_limit行
+        start_tail = max(1, max_row - tail_check_limit + 1)  # 尾部起始行（避免越界）
+        for row in range(max_row, start_tail - 1, -1):
+            if self.check_thread_running():
+                return None
+            
+            if self.has_valid_data(sheet, row):
+                return row  # 尾部找到有效行，直接返回
+        
+        # 尾部未找到，说明有效行可能占比很高，从头部遍历
+        last_valid = 0
+        for row in range(1, max_row + 1):
+            if self.check_thread_running():
+                return None
+            if self.has_valid_data(sheet, row):
+                last_valid = row
+            else:
+                # 优化：若连续超过tail_check_limit行都是空行，说明后面都是空行
+                if row - last_valid > tail_check_limit:
+                    break
+        return last_valid
+    
+
+    def delete_bottom_blank_rows(self, sheet):
+        """删除底部空白行（基于find_last_valid_row的结果）"""
+        try:
+            last_valid = self.find_last_valid_row(sheet)
+            if str(last_valid) == "None":
+                return 0, "用户终止对比进程"
+            max_row = sheet.max_row
+            
+            if last_valid < max_row and last_valid > 0:
+                delete_count = max_row - last_valid
+                sheet.delete_rows(last_valid + 1, delete_count)
+                self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+                self.logger.info(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+            else:
+                self.progress_current_task.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
+                self.logger.info(f"工作表 '{sheet.title}' 无底部空行需要删除")
+            return 1, None
+        except Exception as e:
+            self.logger.info(f"Error: {e}") 
+            return 0, e
