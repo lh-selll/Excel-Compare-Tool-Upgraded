@@ -586,7 +586,7 @@ class Person_ComparisonApp:
         # --------------------- 单元格对比 --------------------- #
         self.progress_current_task.emit(f"开始对比sheet【{sheet1.title}】单元格")
         self.logger.info(f"开始对比sheet【{sheet1.title}】单元格")
-        blank_row_flag = 0
+        # blank_row_flag = 0
         
         for row1 in range(2, max_row1 + 1):  # 从第2行开始对比（跳过标题行）
             # 进度更新
@@ -607,15 +607,22 @@ class Person_ComparisonApp:
             # 获取目标行号
             row2 = index_column_mapping.get(row1, 0)
             if row2 == 0:
-                blank_row_flag += 1
                 row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
-                if blank_row_flag >= 20:
-                    self.progress_current_task.emit("连续20行无匹配，结束对比\n")
-                    self.logger.info("连续20行无匹配，结束对比\n")
-                    break
+                
+                # # 检查本行是否存在有效值
+                # if not self.has_valid_data(sheet1, row1):
+                #     blank_row_flag += 1 # 空行计数
+                # else:
+                #     blank_row_flag = 0  # 非空行，重置计数
+
+                # # 连续空行时，结束对比
+                # if blank_row_flag >= 20:
+                #     self.progress_current_task.emit("连续20行无匹配，结束对比\n")
+                #     self.logger.info("连续20行无匹配，结束对比\n")
+                #     break
                 continue
                 
-            blank_row_flag = 0
+            # blank_row_flag = 0
             row_isChanged_status_flag = False
             
             # 逐列对比
@@ -831,7 +838,7 @@ class Person_ComparisonApp:
         # 建立行映射
         max_row1 = sheet1.max_row
         row_mapping: Dict[int, int] = {}  # 行映射结果
-        blank_row_count = 0
+        # blank_row_count = 0
         for row1 in range(title_row_number+1, max_row1 + 1):
             if self.check_thread_running():
                 return 0
@@ -851,23 +858,26 @@ class Person_ComparisonApp:
             
             # 处理空行
             if not merged_text:
-                blank_row_count += 1
-                if blank_row_count >= 20:
-                    row_mapping[row1] = 0
-                    print_info = f"连续20行索引列值为空，结束sheet【{sheet1.title}】的匹配"
-                    self.logger.info(print_info)
-                    self.progress_current_task.emit(print_info)
-                    self.logger.info(print_info)
-                    for row in range(row1-19, row1+1):
-                        row_mapping.pop(row, None)
-                        self.set_rows_color(sheet1, row1, self.None_color)
-                    break
+                # if not self.has_valid_data(sheet1, row1):
+                #     blank_row_count += 1
+                # else:
+                #     blank_row_count = 0
+                # if blank_row_count >= 20:
+                #     row_mapping[row1] = 0
+                #     print_info = f"连续20行索引列值为空，结束sheet【{sheet1.title}】的匹配"
+                #     self.logger.info(print_info)
+                #     self.progress_current_task.emit(print_info)
+                #     self.logger.info(print_info)
+                #     for row in range(row1-19, row1+1):
+                #         row_mapping.pop(row, None)
+                #         self.set_rows_color(sheet1, row1, self.None_color)
+                #     break
                     
                 # 标记为未匹配并设置颜色
                 row_mapping[row1] = 0
                 self.set_rows_color(sheet1, row1, self.No_match_color)
                 continue
-            blank_row_count = 0
+            # blank_row_count = 0
 
             # 在预索引中查找匹配行
             if merged_text in sheet2_index_map:
@@ -1367,6 +1377,7 @@ class Person_ComparisonApp:
                     row=start_row + (row_idx - 1),
                     column=col_idx
                 )
+                # self.logger.info(f"row = {start_row + (row_idx - 1)}, col = {col_idx}, value = {cell.value}")
                 # 复制单元格值
                 target_cell.value = cell.value
                 # 复制单元格样式（可选，根据需求决定是否保留格式）
@@ -1379,7 +1390,13 @@ class Person_ComparisonApp:
     
 
     def has_valid_data(self, sheet, row):
-        """检查指定行是否有有效数据（非空且非空白字符串）"""
+        """"""
+        """
+        检查指定行是否有有效数据（非空且非空白字符串）
+        returns:
+            True    : 本行存在有效数据
+            False   : 本行为空
+        """
         for cell in sheet[row]:
             if self.check_thread_running():
                 return False
@@ -1448,6 +1465,9 @@ class Person_ComparisonApp:
                 sheet.delete_rows(last_valid + 1, delete_count)
                 self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
                 self.logger.info(f"工作表 '{sheet.title}' 处理完成，删除了底部 {delete_count} 个空行")
+                self.logger.info(f"工作表 '{sheet.title}' 处理完成，sheet.max_row = {sheet.max_row}")
+                self.progress_current_task.emit(f"工作表 '{sheet.title}' 处理完成，sheet.max_row = {sheet.max_row}")
+                
             else:
                 self.progress_current_task.emit(f"工作表 '{sheet.title}' 无底部空行需要删除")
                 self.logger.info(f"工作表 '{sheet.title}' 无底部空行需要删除")

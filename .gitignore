@@ -13,3 +13,5 @@
 *.xlsx
 license/license.key
 /license
+*.json
+*.xml

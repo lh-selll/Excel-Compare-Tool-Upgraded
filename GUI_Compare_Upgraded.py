@@ -429,14 +429,14 @@ class DataProcessor(QThread):
                 if not self.is_running:
                     raise ValueError("用户终止对比进程")
                 wb1_sheet = wb1[row_data.sheet1_name]
-                self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} 开始删除wb1_sheet={row_data.sheet1_name}的底部空白行")
-                self.signal_list.progress_current_task.emit("开始删除wb1_sheet={row_data.sheet1_name}的底部空白行")
+                self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} 开始删除wb1_sheet=【{row_data.sheet1_name}】的底部空白行")
+                self.signal_list.progress_current_task.emit(f"开始删除wb1_sheet=【{row_data.sheet1_name}】的底部空白行")
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb1_sheet)
                 if not status:
                     raise ValueError("用户终止对比进程")
                 wb2_sheet = wb2[row_data.sheet2_name]
-                self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} 开始删除wb2_sheet={row_data.sheet2_name}的底部空白行")
-                self.signal_list.progress_current_task.emit("开始删除wb2_sheet={row_data.sheet2_name}的底部空白行")
+                self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} 开始删除wb2_sheet=【{row_data.sheet2_name}】的底部空白行")
+                self.signal_list.progress_current_task.emit(f"开始删除wb2_sheet=【{row_data.sheet2_name}】的底部空白行")
                 status, error_msg = self.CompareApp.delete_bottom_blank_rows(wb2_sheet)
                 if not status:
                     raise ValueError("用户终止对比进程")
