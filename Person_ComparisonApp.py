@@ -361,8 +361,9 @@ class Person_ComparisonApp:
         )
         if fill_color == self.Not_Agreed_color: # 不一致颜色
             # 处理空值
-            value1 = cell1.value or ""
-            value2 = cell2.value or ""
+            self.logger.debug(f"对比不一致:  {cell1.value} <> {cell2.value}")
+            value1 = str(cell1.value) or ""
+            value2 = str(cell2.value) or ""
             
             """通过底层属性设置删除线，兼容更多版本"""
             # 创建InlineFont对象（不直接传strikethrough参数）
@@ -454,8 +455,8 @@ class Person_ComparisonApp:
                     self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Agreed_color)
                     
                     # 空值处理
-                    value1 = sheet1_cell.value or ""
-                    value2 = sheet2_cell.value or ""
+                    value1 = str(sheet1_cell.value) or ""
+                    value2 = str(sheet2_cell.value) or ""
                     
                     if value1 == "" and value2 == "":
                         blank_col_flag += 1
