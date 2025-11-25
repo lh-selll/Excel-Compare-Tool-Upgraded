@@ -63,8 +63,8 @@ class ExcelFileHandler:
         try:
             ext = os.path.splitext(file_path)[1].lower()
             file_name = os.path.basename(file_path).split(".")[0]
-            dirname = os.path.dirname(file_path)+"\\temp\\"
-            temp_file_path = dirname + file_name + "_temp" + ext
+            # dirname = os.path.dirname(file_path)+"\\temp\\"
+            temp_file_path = TEMP_DIR + file_name + "_temp" + ext
             print(f"正在打开文件: {file_path}，临时文件路径: {temp_file_path}")
             status, error = ExcelFileHandler.copy_temp_file(file_path, temp_file_path)
             if status == False:
@@ -231,11 +231,11 @@ class ExcelFileHandler:
                 except PermissionError:
                     # 若文件被占用，等待1秒重试（针对Excel临时文件）
                     import time
-                    time.sleep(0.5)
+                    time.sleep(0.1)
                     path_without_ext, ext = os.path.splitext(target_path)
                     ext = ext.lower()
                     target_path = f"{path_without_ext}_{index}{ext}"
-                    print(f"❌ 复制临时文件失败(第{index+1}次尝试）：{e}")
+                    print(f"❌ 复制临时文件失败(第{index+1}次尝试）")
 
             error = f"❌ 多次尝试后仍无法复制临时文件，可能文件被占用：{source_path}"
             print(error)
@@ -246,6 +246,30 @@ class ExcelFileHandler:
             print(error)
             return False, error
      
+    @staticmethod
+    def safe_close_wb(wb: Workbook, file_path: str = ""):
+        """
+        安全关闭单个Workbook实例（兼容只读/非只读模式）
+        """
+        try:
+            # 1. 关闭Workbook（核心）
+            if hasattr(wb, 'close'):
+                wb.close()
+                print(f"✅ 关闭Workbook：{file_path}（模式：{'只读' if wb.read_only else '非只读'}）")
+            
+            # 2. 只读模式额外处理：关闭底层文件流（openpyxl 3.x 只读模式特有）
+            if getattr(wb, 'read_only', False):
+                if hasattr(wb, '_archive') and not wb._archive.closed:
+                    wb._archive.close()
+                    print(f"🔒 关闭只读模式文件流：{file_path}")
+            
+            # 3. 解除变量引用（加速垃圾回收）
+            del wb
+        
+        except Exception as e:
+            print(f"⚠️ 关闭Workbook失败：{file_path}，错误：{e}")
+            
+
 class FileSelectorWidget(QWidget):
     """文件选择组件，包含标签、路径输入框和浏览按钮"""
     def __init__(self, label_text, path_edit_height, parent=None):
@@ -488,6 +512,8 @@ class DataProcessor(QThread):
     def run(self):
         """线程主函数，执行Excel对比流程"""
         current_progress_percent = 0    #当前进度条数值
+        wb1 = None
+        wb2 = None
         restored_config_data = restored_config_data_Container(len(self.config_data))
         restored_config_data.file1_path = self.file1_path
         restored_config_data.file2_path = self.file2_path
@@ -499,8 +525,6 @@ class DataProcessor(QThread):
         formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", local_time)
         self.signal_list.progress_current_task.emit(f"开始时间：{formatted_time}\nopenning File")
         self.logger.info(f"开始时间：{formatted_time}\nopenning File")
-
-
 
         try:
             FileHandler.clear_text_file(log_file_path)
@@ -795,10 +819,7 @@ class DataProcessor(QThread):
 
             
                     
-            self.signal_list.progress_current_task.emit("完成创建图表")
-
-            
-                    
+            self.signal_list.progress_current_task.emit("完成创建图表")                    
             self.logger.info("完成创建图表")
             
             compare_compeleted_time = time.time()
@@ -839,10 +860,6 @@ class DataProcessor(QThread):
                     self.exec()
                     if not self.return_value:
                         raise ValueError(f"文件保存失败：{str(e)}")
-            wb1.close()
-            wb2.close()
-            self.safe_close_wb(wb1)
-            self.safe_close_wb(wb2)
             saving_compeleted_time = time.time()
             self.signal_list.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
@@ -913,14 +930,19 @@ class DataProcessor(QThread):
                 error_msg = f"处理失败: {str(e)}\n详情见”error.log”文件"
             self.signal_list.error_occurred.emit("ERROR", error_msg, None)
             self.signal_list.comparison_finished.emit("failed")
-            wb1 = None
-            wb2 = None
             # 写入错误日志，包含位置信息
             with open('error.log', 'w', encoding='utf-8') as f:  # 建议用 'a' 追加模式，避免覆盖历史日志
                 # traceback.format_exc() 已包含文件名、行号、函数名
                 f.write(f'===== 错误发生时间：{time.strftime("%Y-%m-%d %H:%M:%S")} =====\n')
                 f.write(f'错误描述：{str(e)}\n')
                 f.write(f'错误位置及堆栈：\n{traceback.format_exc()}\n\n')
+        finally:
+            # 确保无论成功还是失败，文件都被关闭
+            if wb1 is not None:
+                ExcelFileHandler.safe_close_wb(wb1)
+            if wb2 is not None:
+                ExcelFileHandler.safe_close_wb(wb2)
+
         return None
 
     def create_chart(self, sheet, chart_name, labels_range, data_range, position_row, position_col, colors_list):
@@ -996,28 +1018,6 @@ class DataProcessor(QThread):
 
             
     
-    @staticmethod
-    def safe_close_wb(wb: Workbook, file_path: str = ""):
-        """
-        安全关闭单个Workbook实例（兼容只读/非只读模式）
-        """
-        try:
-            # 1. 关闭Workbook（核心）
-            if hasattr(wb, 'close'):
-                wb.close()
-                print(f"✅ 关闭Workbook：{file_path}（模式：{'只读' if wb.read_only else '非只读'}）")
-            
-            # 2. 只读模式额外处理：关闭底层文件流（openpyxl 3.x 只读模式特有）
-            if getattr(wb, 'read_only', False):
-                if hasattr(wb, '_archive') and not wb._archive.closed:
-                    wb._archive.close()
-                    print(f"🔒 关闭只读模式文件流：{file_path}")
-            
-            # 3. 解除变量引用（加速垃圾回收）
-            del wb
-        
-        except Exception as e:
-            print(f"⚠️ 关闭Workbook失败：{file_path}，错误：{e}")
 
 class DataProcessingTool(QMainWindow):
     """主应用程序窗口"""
@@ -1526,14 +1526,14 @@ class DataProcessingTool(QMainWindow):
         if not self.restored_config_data.load_from_file(json_file_path):
             self.restored_config_data.update_row_number(self.table_row_number)
             if os.path.exists(json_file_path):
-                os.remove(json_file_path)  # 删除文件
+                FileHandler.delete_file(json_file_path)  # 删除文件
                 self.logger.info(f"文件 {json_file_path} 已成功删除")
         else:
             restored_result, error_msg = self.restore_current_data(self.restored_config_data) #加载历史数据
             if not restored_result:
                 self.current_task_edit.appendPlainText(f"配置文件有误，已清空配置：\n原因:{error_msg}")
                 if os.path.exists(json_file_path):
-                    os.remove(json_file_path)  # 删除文件
+                    FileHandler.delete_file(json_file_path)
                     self.logger.info(f"文件 {json_file_path} 已成功删除")
             else:
                 self.current_task_edit.appendPlainText(f"初始化完成，恢复历史配置")
@@ -1659,6 +1659,11 @@ class DataProcessingTool(QMainWindow):
 
     def One_click_clear(self):
         """一键清空配置"""
+        # 关闭已打开的工作簿
+        ExcelFileHandler.safe_close_wb(self.wb1)
+        ExcelFileHandler.safe_close_wb(self.wb2)
+        self.wb1 = None
+        self.wb2 = None
         # 清空no_mapping_tab配置表
         for row in range(0, self.table_row_number):
             # title行数初始化为1
@@ -1688,11 +1693,8 @@ class DataProcessingTool(QMainWindow):
         self.current_task_edit.clear()
         self.result_text_edit.clear()
 
-        self.wb1 = None
-        self.wb2 = None
-
         # 删除config文件
-        os.remove(json_file_path)
+        FileHandler.delete_file(json_file_path)
 
     def open_result_file(self, up_or_down):
         if up_or_down == 0:
@@ -1982,21 +1984,45 @@ class DataProcessingTool(QMainWindow):
         
     def title_row_changed(self, table, row):
         """title列数变更-事件处理"""
-        sheet1_name = table.cellWidget(row, 0).currentText()
-        sheet2_name = table.cellWidget(row, 1).currentText()
-        title_rows_number = table.cellWidget(row, self.title_rows).value()
-        self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
-        self.logger.info(f"self.title_list = {self.title_list}")
-        # string_list_model = QStringListModel(self.title_list)
-        for col in range(self.index_col_position[0], self.index_col_position[1]+1):
-            combo = table.cellWidget(row, col)
-            combo.clear()
-            combo.addItems([""]+self.title_list)
-            combo.completer().setModel(QStringListModel(self.title_list))
+        if self.wb1 is None or self.wb2 is None:
+            self.logger.warning("工作簿未加载，无法处理标题行变更。")
+            return
         
-        self.button_up.setEnabled(0)
-        self.button_down.setEnabled(0)
-        self.button_log.setEnabled(0)
+        try:
+            sheet1_name = table.cellWidget(row, 0).currentText()
+            sheet2_name = table.cellWidget(row, 1).currentText()
+            title_rows_number = table.cellWidget(row, self.title_rows).value()
+            self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
+            self.logger.info(f"self.title_list = {self.title_list}")
+            # string_list_model = QStringListModel(self.title_list)
+            for col in range(self.index_col_position[0], self.index_col_position[1]+1):
+                combo = table.cellWidget(row, col)
+                combo.clear()
+                combo.addItems([""]+self.title_list)
+                combo.completer().setModel(QStringListModel(self.title_list))
+        except KeyError as e:
+            # 捕获因工作表名称不存在而引发的 KeyError
+            self.logger.error(f"无法找到指定的工作表: {e}，请检查工作表名称是否正确。")
+            # 在 UI 上给出明确反馈，例如弹窗警告
+            # QMessageBox.warning(self, "错误", f"无法找到工作表: {e}\n请检查配置。")
+            self._clear_index_columns(table, row)
+
+        except Exception as e:
+            # 捕获其他所有未预料到的异常
+            self.logger.critical(f"处理标题行变更时发生未知错误: {e}", exc_info=True)
+            # 同样，在 UI 上通知用户发生了错误
+            # QMessageBox.critical(self, "严重错误", f"处理失败: {e}\n请查看日志获取详情。")
+            self._clear_index_columns(table, row)
+
+        finally:
+            # 健壮性改进 9: 状态重置的可靠性
+            # 无论成功还是失败，都确保按钮状态被正确重置
+            # 使用 finally 块可以保证这一点
+            self.button_up.setEnabled(False)
+            self.button_down.setEnabled(False)
+            self.button_log.setEnabled(False)
+            self.logger.info(f"第 {row} 行标题行变更事件处理完毕。")
+
         
     def get_title_list(self, sheet1, sheet2, title_row_number):
         title_row_values1 = list(next(sheet1.iter_rows(min_row=title_row_number, max_row=title_row_number, values_only=True)))
@@ -2097,6 +2123,8 @@ class DataProcessingTool(QMainWindow):
         self.button_log.setEnabled(complete_flag == "success")
         self.logger.info(f"bool(complete_flag) = {(complete_flag)}")
         self.signal_list.disconnect_signals()
+        # ExcelFileHandler.safe_close_wb(self.wb1)
+        # ExcelFileHandler.safe_close_wb(self.wb2)
 
     def add_addItems_for_combo(self, row_number, table, column, Option_value_list):
         """给table的列添加选项值"""
@@ -2129,14 +2157,21 @@ class DataProcessingTool(QMainWindow):
         
         if file_path:
             try:
-                selector.set_file_path(file_path)
                 wb, error_msg = ExcelFileHandler.open_file(file_path, True)
-                self.logger.info("ValueError(error_msg)1")
                 if wb is None:
+                    self.logger.info(f"ValueError({error_msg})")
+                    # selector.set_file_path("")
+                    # if selector == self.file1_selector:
+                    #     ExcelFileHandler.safe_close_wb(self.wb1)
+                    # elif selector == self.file2_selector:
+                    #     ExcelFileHandler.safe_close_wb(self.wb2)
+                    # else:
+                    #     pass
+                    
                     ValueError(error_msg)
-                    self.logger.info("ValueError(error_msg)2")
-                self.logger.info("ValueError(error_msg)3")
+                    
                 self.logger.info(f"wb.sheetnames = {wb.sheetnames}")
+                selector.set_file_path(file_path)
                 if selector == self.file1_selector:
                     self.wb1 = wb
                     self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
@@ -2181,8 +2216,6 @@ class DataProcessingTool(QMainWindow):
                 pass
         else:
             self.processor.stop()
-            DataProcessor.safe_close_wb(self.wb1)
-            DataProcessor.safe_close_wb(self.wb2)
             self.processor.wait()  # 等待线程结束（可选）
             self.set_button_status("开始处理")
 
@@ -2370,6 +2403,13 @@ class DataProcessingTool(QMainWindow):
     
     def closeEvent(self, event):
         """窗口关闭时，确保日志线程正常关闭"""
+        print("窗口关闭时，主动关闭日志线程")
+        if self.wb1:
+            ExcelFileHandler.safe_close_wb(self.wb1)
+        print("ExcelFileHandler.safe_close_wb(self.wb1)")
+        if self.wb2:
+            ExcelFileHandler.safe_close_wb(self.wb2)
+        print("ExcelFileHandler.safe_close_wb(self.wb2)")
         # 关闭后台日志线程
         self.logger.shutdown()
 
@@ -2517,13 +2557,12 @@ class InitialScreen(QWidget):
         
         # 关闭初始化窗口
         self.close()
-    
+        
     def closeEvent(self, event):
         """窗口关闭时，主动关闭日志线程"""
         self.log_manager.shutdown()  # 关键：显式关闭日志线程
         event.accept()
 
-        
 
 """程序入口点：初始化应用程序并启动事件循环"""
 try:
@@ -2554,7 +2593,6 @@ try:
     window.restore_data()
     # 确保应用程序退出时返回正确的状态码
     sys.exit(app.exec())
-
 
 except Exception as e:
     # 捕获应用程序启动过程中的任何异常（如导入错误、初始化失败）
