@@ -14,7 +14,8 @@ import inspect
 import copy
 import json
 import time
-
+import shutil
+# import tempfile  # 用于生成安全的临时文件路径
 import Log_Manager
 
 # 记录应用程序启动时间（用于性能分析或日志记录）
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QStringListModel, QSize, QObject
 
 from PySide6.QtGui import QColor, QFont, QValidator, QPixmap, QPainter, QGuiApplication
+from openpyxl.workbook import Workbook
 
 from Person_ComparisonApp import Person_ComparisonApp
 from Deviceid_license_verify import DeviceIDLicenseVerify
@@ -40,15 +42,210 @@ from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 from Log_Manager import BackgroundLogManager
 
+FILE_ATTRIBUTE_HIDDEN = 0x02  # 隐藏属性（浅色显示关键）
+FILE_ATTRIBUTE_SYSTEM = 0x04  # 系统属性（强化隐藏）
+
 output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
 license_file_path = '.\\license\\license.key'
 compare_info_file_path = '.\\result.log'
 log_file_path = '.\\log\\processor.log'
 error_info_path = '.\\error.log'
-
+TEMP_DIR = '.\\inputfile\\temp\\'
 Global_Logger = BackgroundLogManager(log_file_path=log_file_path)
 
+
+class ExcelFileHandler:
+    @staticmethod
+    def open_file(file_path, read_only_flag = False):
+        """打开Excel文件，支持.xls/.xlsx/.xlsm/.csv格式"""
+        # 加载一个 Excel 文件
+        try:
+            ext = os.path.splitext(file_path)[1].lower()
+            file_name = os.path.basename(file_path).split(".")[0]
+            dirname = os.path.dirname(file_path)+"\\temp\\"
+            temp_file_path = dirname + file_name + "_temp" + ext
+            print(f"正在打开文件: {file_path}，临时文件路径: {temp_file_path}")
+            status, error = ExcelFileHandler.copy_temp_file(file_path, temp_file_path)
+            if status == False:
+                return None, error
+
+            # 设置文件为「隐藏+系统属性」（浅色显示关键）使用ctypes调用Windows API修改文件属性
+            # ctypes.windll.kernel32.SetFileAttributesW(
+            #     temp_file_path,
+            #     FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+            # )
+            if temp_file_path.lower().endswith('.xls'):
+                # 处理 .xls 文件
+                wb = openpyxl.Workbook()
+                xls_wb = xlrd.open_workbook(temp_file_path, on_demand=read_only_flag)
+                for sheet_name in xls_wb.sheet_names():
+                    xls_sheet = xls_wb.sheet_by_name(sheet_name)
+                    new_sheet = wb.create_sheet(sheet_name)
+                    for row in range(xls_sheet.nrows):
+                        for col in range(xls_sheet.ncols):
+                            new_sheet.cell(row=row + 1, column=col + 1).value = xls_sheet.cell_value(row, col)
+                del wb['Sheet']  # 删除默认创建的工作表
+            elif temp_file_path.lower().endswith('.csv'):
+                try:
+                    # 尝试常见编码格式
+                    encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig', 'gb18030']
+                    for encoding in encodings:
+                        try:
+                            df = pd.read_csv(
+                                temp_file_path,
+                                encoding=encoding,
+                                keep_default_na=False,  # 关键：不将空白格解析为NaN
+                                na_values=[]  # 额外确保不将任何值识别为NaN（可选）
+                            )
+                            # 替换所有NaN值为空字符串
+                            df = df.fillna("")
+                            print(f"成功读取文件，使用编码: {encoding}")
+                            break
+                        except UnicodeDecodeError:
+                            if encoding == encodings[-1]:
+                                return None, "无法识别文件编码，请检查文件格式"
+                            else:
+                                continue
+                
+                except Exception as e:
+                    return None, f"读取文件出错: {str(e)}"
+                # 直接创建openpyxl工作簿并写入数据（无临时文件）
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                # 写入表头
+                ws.append(df.columns.tolist())
+                # 写入数据行
+                for row in df.itertuples(index=False, name=None):
+                    ws.append(row)
+            elif temp_file_path.lower().endswith('.xlsx'):
+                # 处理 .xlsx 文件
+                wb = openpyxl.load_workbook(temp_file_path, read_only=read_only_flag, data_only=True)
+            
+            elif temp_file_path.lower().endswith('.xlsm'):
+                # 处理 .xlsm 文件
+                wb = openpyxl.load_workbook(temp_file_path, keep_vba=True, read_only=read_only_flag, data_only=True)
+                
+        except FileNotFoundError:
+            error = f"文件 {temp_file_path} 不存在。"
+            print(error)
+            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            return (None, error)
+        except openpyxl.utils.exceptions.InvalidFileException:
+            error = f"文件 {temp_file_path} 不是有效的 Excel 文件, 请重新输入"
+            print(error)
+            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            return (None, error)
+        except Exception as e:
+            error = f"发生了未知错误：{e}"
+            print(error)
+            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
+            return (None, error)
+        FileHandler.delete_file(temp_file_path)
+        return (wb, None)
+
+    @staticmethod
+    def saving_file(wb, output_path):
+        """保存Excel文件"""
+        try:
+            # 根据文件扩展名选择保存方式
+            ext = os.path.splitext(output_path)[1].lower()
+            if ext in ('.xlsx', '.xlsm', '.xls'):
+                # 使用 openpyxl 保存
+                wb.save(output_path)
+            
+            elif ext == '.csv':
+                # 保存为 CSV（适合用 pandas 处理）
+                import pandas as pd
+                df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                df.to_csv(output_path, index=False, header=False)
+            
+            print(f"文件保存成功: {output_path}")
+            return 1, None
+        except Exception as e:
+            print(e)
+            if isinstance(e, PermissionError):
+                error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
+            elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
+                error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
+            elif isinstance(e, FileNotFoundError):
+                error = f"保存文件时文件路径不存在：{str(e)}"
+                try:
+                    output_dir = os.path.dirname(output_path)
+                    os.mkdir(output_dir)
+                    error = f"文件夹 {output_dir} 创建成功。"
+                    # 根据文件扩展名选择保存方式
+                    ext = os.path.splitext(output_path)[1].lower()
+                    
+                    if ext in ('.xlsx', '.xlsm', '.xls'):
+                        # 使用 openpyxl 保存
+                        wb.save(output_path)
+                    
+                    elif ext == '.csv':
+                        # 保存为 CSV（适合用 pandas 处理）
+                        import pandas as pd
+                        df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
+                        df.to_csv(output_path, index=False, header=False)
+                    
+                    print(f"文件保存成功: {output_path}")
+                    return 1, None
+                except FileExistsError:
+                    error = f"文件夹 {output_path} 已经存在。"
+                except PermissionError:
+                    error = f"没有权限创建文件夹 {output_path}。"
+            else:
+                error = f"保存文件时出现未知错误：{str(e)}"
+
+            print(error)
+            return 0, error
+        
+    @staticmethod
+    def copy_temp_file(source_path: str, target_path: str):
+        """
+        直接复制磁盘上的临时文件（兼容Excel/XLSM，避免文件占用）
+        :param source_path: 源临时文件路径（如临时XLSM）
+        :param target_path: 目标复制路径
+        :return: True=成功，False=失败
+        """
+        try:
+            # 1. 检查源文件是否存在
+            if not os.path.exists(source_path):
+                error = f"❌ 源临时文件不存在：{source_path}"
+                print(error)
+                return False, error
+            
+            # 2. 确保目标目录存在
+            target_dir = os.path.dirname(target_path)
+            if target_dir and not os.path.exists(target_dir):
+                os.makedirs(target_dir)
+            
+            # 3. 关键：用copy2复制（保留文件元数据，比copy更安全）
+            #    若文件被占用，先尝试关闭Excel相关句柄（可选）
+            index = 0
+            for index in range(0, 20):
+                try:
+                    shutil.copy2(source_path, target_path)
+                    print(f"✅ 临时文件复制成功：\n  源：{source_path}\n  目标：{target_path}")
+                    return True, None
+                
+                except PermissionError:
+                    # 若文件被占用，等待1秒重试（针对Excel临时文件）
+                    import time
+                    time.sleep(0.5)
+                    path_without_ext, ext = os.path.splitext(target_path)
+                    ext = ext.lower()
+                    target_path = f"{path_without_ext}_{index}{ext}"
+                    print(f"❌ 复制临时文件失败(第{index+1}次尝试）：{e}")
+
+            error = f"❌ 多次尝试后仍无法复制临时文件，可能文件被占用：{source_path}"
+            print(error)
+            return False, error
+        
+        except Exception as e:
+            error = f"❌ 复制临时文件失败：{e}"
+            print(error)
+            return False, error
+     
 class FileSelectorWidget(QWidget):
     """文件选择组件，包含标签、路径输入框和浏览按钮"""
     def __init__(self, label_text, path_edit_height, parent=None):
@@ -311,12 +508,12 @@ class DataProcessor(QThread):
             self.signal_list.progress_updated.emit(0)
             self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno}，DataProcessor")
 
-            wb1, error_msg = self.open_file(self.file1_path)   # 打开文件1
+            wb1, error_msg = ExcelFileHandler.open_file(self.file1_path)   # 打开文件1
             if not wb1:
                 raise ValueError(f"打开文件1失败: {error_msg}")
             if not self.is_running:
                 raise ValueError("用户终止对比进程")
-            wb2, error_msg = self.open_file(self.file2_path)   # 打开文件2
+            wb2, error_msg = ExcelFileHandler.open_file(self.file2_path)   # 打开文件2
             if not wb2:
                 raise ValueError(f"打开文件2失败: {error_msg}")
             if not self.is_running:
@@ -609,19 +806,43 @@ class DataProcessor(QThread):
             self.signal_list.progress_current_task.emit("完成所有sheet对比任务，开始保存File")
             self.logger.info("完成所有sheet对比任务，开始保存File")
             # 保存对比结果
-            if self.saving_file(wb1, output_path1):
-                self.signal_list.progress_current_task.emit("File1保存成功")
-                self.logger.info("File1保存成功")
-                self.signal_list.progress_current_task.emit(f"File1:output_path1 = {output_path1}")
-                self.logger.info(f"File1:output_path1 = {output_path1}")
+            flag = True
+            while(flag):
+                status, error = ExcelFileHandler.saving_file(wb1, output_path1)
+                if status:
+                    self.signal_list.progress_current_task.emit("File1保存成功")
+                    self.logger.info("File1保存成功")
+                    self.signal_list.progress_current_task.emit(f"File1:output_path1 = {output_path1}")
+                    self.logger.info(f"File1:output_path1 = {output_path1}")
+                    break
+                else:
+                    # 保存失败，询问是否重试
+                    self.signal_list.progress_current_task.emit(f"{error}")
+                    self.signal_list.error_occurred.emit("QUESTION", error, self)
+                    self.exec()
+                    if not self.return_value:
+                        raise ValueError(f"文件保存失败：{str(e)}")
+                    
             self.signal_list.progress_updated.emit(95)
-            if self.saving_file(wb2, output_path2):
-                self.signal_list.progress_current_task.emit("File2保存成功")
-                self.logger.info("File2保存成功")
-                self.signal_list.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
-                self.logger.info(f"File2:output_path2 = {output_path2}")
+
+            while(flag):
+                status, error  = ExcelFileHandler.saving_file(wb2, output_path2)
+                if status:
+                    self.signal_list.progress_current_task.emit("File2保存成功")
+                    self.logger.info("File2保存成功")
+                    self.signal_list.progress_current_task.emit(f"File2:output_path2 = {output_path2}")
+                    self.logger.info(f"File2:output_path2 = {output_path2}")
+                    break
+                else:
+                    # 保存失败，询问是否重试
+                    self.signal_list.error_occurred.emit("QUESTION", error, self)
+                    self.exec()
+                    if not self.return_value:
+                        raise ValueError(f"文件保存失败：{str(e)}")
             wb1.close()
             wb2.close()
+            self.safe_close_wb(wb1)
+            self.safe_close_wb(wb2)
             saving_compeleted_time = time.time()
             self.signal_list.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
@@ -773,143 +994,31 @@ class DataProcessor(QThread):
             self.signal_list.error_occurred.emit("WARNING", error, None)
             return 0
 
-    @staticmethod
-    def open_file(file_path, read_only_flag = False):
-        """打开Excel文件，支持.xls/.xlsx/.xlsm/.csv格式"""
-        # 加载一个 Excel 文件
-        try:
-            if file_path.lower().endswith('.xls'):
-                # 处理 .xls 文件
-                wb = openpyxl.Workbook()
-                xls_wb = xlrd.open_workbook(file_path, on_demand=read_only_flag)
-                for sheet_name in xls_wb.sheet_names():
-                    xls_sheet = xls_wb.sheet_by_name(sheet_name)
-                    new_sheet = wb.create_sheet(sheet_name)
-                    for row in range(xls_sheet.nrows):
-                        for col in range(xls_sheet.ncols):
-                            new_sheet.cell(row=row + 1, column=col + 1).value = xls_sheet.cell_value(row, col)
-                del wb['Sheet']  # 删除默认创建的工作表
-            elif file_path.lower().endswith('.csv'):
-                try:
-                    # 尝试常见编码格式
-                    encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig', 'gb18030']
-                    for encoding in encodings:
-                        try:
-                            df = pd.read_csv(
-                                file_path,
-                                encoding=encoding,
-                                keep_default_na=False,  # 关键：不将空白格解析为NaN
-                                na_values=[]  # 额外确保不将任何值识别为NaN（可选）
-                            )
-                            # 替换所有NaN值为空字符串
-                            df = df.fillna("")
-                            print(f"成功读取文件，使用编码: {encoding}")
-                            break
-                        except UnicodeDecodeError:
-                            if encoding == encodings[-1]:
-                                return None, "无法识别文件编码，请检查文件格式"
-                            else:
-                                continue
-                
-                except Exception as e:
-                    return None, f"读取文件出错: {str(e)}"
-                # 直接创建openpyxl工作簿并写入数据（无临时文件）
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                # 写入表头
-                ws.append(df.columns.tolist())
-                # 写入数据行
-                for row in df.itertuples(index=False, name=None):
-                    ws.append(row)
-            elif file_path.lower().endswith('.xlsx'):
-                # 处理 .xlsx 文件
-                wb = openpyxl.load_workbook(file_path, read_only=read_only_flag, data_only=True)
-            
-            elif file_path.lower().endswith('.xlsm'):
-                # 处理 .xlsm 文件
-                wb = openpyxl.load_workbook(file_path, keep_vba=True, read_only=read_only_flag, data_only=True)
-                
-        except FileNotFoundError:
-            error = f"文件 {file_path} 不存在。"
-            print(error)
-            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return (None, error)
-        except openpyxl.utils.exceptions.InvalidFileException:
-            error = f"文件 {file_path} 不是有效的 Excel 文件, 请重新输入"
-            print(error)
-            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return (None, error)
-        except Exception as e:
-            error = f"发生了未知错误：{e}"
-            print(error)
-            # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
-            return (None, error)
-        return (wb, None)
-
-    def saving_file(self, wb, output_path):
-        """保存Excel文件"""
-        flag = True
-        while(flag):
-            try:
-                # 根据文件扩展名选择保存方式
-                ext = os.path.splitext(output_path)[1].lower()
-                
-                if ext in ('.xlsx', '.xlsm', '.xls'):
-                    # 使用 openpyxl 保存
-                    wb.save(output_path)
-                
-                elif ext == '.csv':
-                    # 保存为 CSV（适合用 pandas 处理）
-                    import pandas as pd
-                    df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
-                    df.to_csv(output_path, index=False, header=False)
-                
-                self.logger.info(f"文件保存成功: {output_path}")
-                return 1
-            except Exception as e:
-                self.logger.info(e)
-                if isinstance(e, PermissionError):
-                    error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
-                elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
-                    error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
-                elif isinstance(e, FileNotFoundError):
-                    error = f"保存文件时文件路径不存在：{str(e)}"
-                    try:
-                        output_dir = os.path.dirname(output_path)
-                        os.mkdir(output_dir)
-                        error = f"文件夹 {output_dir} 创建成功。"
-                        # 根据文件扩展名选择保存方式
-                        ext = os.path.splitext(output_path)[1].lower()
-                        
-                        if ext in ('.xlsx', '.xlsm', '.xls'):
-                            # 使用 openpyxl 保存
-                            wb.save(output_path)
-                        
-                        elif ext == '.csv':
-                            # 保存为 CSV（适合用 pandas 处理）
-                            import pandas as pd
-                            df = pd.DataFrame(wb.active.values)  # 从工作表提取数据
-                            df.to_csv(output_path, index=False, header=False)
-                        
-                        self.logger.info(f"文件保存成功: {output_path}")
-                        return 1
-                    except FileExistsError:
-                        error = f"文件夹 {output_path} 已经存在。"
-                    except PermissionError:
-                        error = f"没有权限创建文件夹 {output_path}。"
-                else:
-                    error = f"保存文件时出现未知错误：{str(e)}"
-
-                self.logger.info(error)
-                self.signal_list.progress_current_task.emit(f"{error}")
-                self.logger.info(f"{error}")
-                # 保存失败，询问是否重试
-                self.signal_list.error_occurred.emit("QUESTION", error, self)
-                self.exec()
-                if not self.return_value:
-                    raise ValueError(f"文件保存失败：{str(e)}")
             
     
+    @staticmethod
+    def safe_close_wb(wb: Workbook, file_path: str = ""):
+        """
+        安全关闭单个Workbook实例（兼容只读/非只读模式）
+        """
+        try:
+            # 1. 关闭Workbook（核心）
+            if hasattr(wb, 'close'):
+                wb.close()
+                print(f"✅ 关闭Workbook：{file_path}（模式：{'只读' if wb.read_only else '非只读'}）")
+            
+            # 2. 只读模式额外处理：关闭底层文件流（openpyxl 3.x 只读模式特有）
+            if getattr(wb, 'read_only', False):
+                if hasattr(wb, '_archive') and not wb._archive.closed:
+                    wb._archive.close()
+                    print(f"🔒 关闭只读模式文件流：{file_path}")
+            
+            # 3. 解除变量引用（加速垃圾回收）
+            del wb
+        
+        except Exception as e:
+            print(f"⚠️ 关闭Workbook失败：{file_path}，错误：{e}")
+
 class DataProcessingTool(QMainWindow):
     """主应用程序窗口"""
     global output_path
@@ -1453,12 +1562,13 @@ class DataProcessingTool(QMainWindow):
                 return (0, error_msg)
             
             # 打开第一个文件
-            wb1, error_msg = DataProcessor.open_file(file1_path, True)
+            print(f"打开文件1: {file1_path}")
+            wb1, error_msg = ExcelFileHandler.open_file(file1_path, True)
             if not wb1:
                 return (0, f"打开文件1失败: {error_msg}")
             
             # 打开第二个文件
-            wb2, error_msg = DataProcessor.open_file(file2_path, True)
+            wb2, error_msg = ExcelFileHandler.open_file(file2_path, True)
             if not wb2:
                 return (0, f"打开文件2失败: {error_msg}")
             
@@ -2020,7 +2130,7 @@ class DataProcessingTool(QMainWindow):
         if file_path:
             try:
                 selector.set_file_path(file_path)
-                wb, error_msg = DataProcessor.open_file(file_path, True)
+                wb, error_msg = ExcelFileHandler.open_file(file_path, True)
                 self.logger.info("ValueError(error_msg)1")
                 if wb is None:
                     ValueError(error_msg)
@@ -2071,6 +2181,8 @@ class DataProcessingTool(QMainWindow):
                 pass
         else:
             self.processor.stop()
+            DataProcessor.safe_close_wb(self.wb1)
+            DataProcessor.safe_close_wb(self.wb2)
             self.processor.wait()  # 等待线程结束（可选）
             self.set_button_status("开始处理")
 
@@ -2417,7 +2529,7 @@ class InitialScreen(QWidget):
 try:
     # 初始化 Qt 应用程序实例，处理命令行参数
     app = QApplication(sys.argv)
-
+    app.aboutToQuit.connect(lambda: FileHandler.delete_all_files_in_dir(TEMP_DIR))  # 退出时删除临时文件夹内容
     # 设置应用程序样式为 Fusion（跨平台统一风格，更现代）
     app.setStyle("Fusion")
 
@@ -2427,14 +2539,18 @@ try:
     app.setFont(font)
 
     # 创建主窗口实例（DataProcessingTool 类应继承自 QMainWindow 或 QWidget）
+    print("创建主窗口实例")
     window = DataProcessingTool()
     # initial_screen = InitialScreen(window)
     # initial_screen.show()
     InitialScreen.license_verify(license_file_path)
 
     # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
+    print("show")
     window.show()
+    print("init_ui")
     window.init_ui()
+    print("restore_data")
     window.restore_data()
     # 确保应用程序退出时返回正确的状态码
     sys.exit(app.exec())

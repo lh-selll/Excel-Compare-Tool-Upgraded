@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import time
 import logging
 import subprocess
 from typing import List, Optional, Union
@@ -186,7 +187,42 @@ class FileHandler:
         except Exception as e:
             print(f"删除文件失败: {e}")
             return False
+    
+    @staticmethod
+    def delete_all_files_in_dir(target_dir: str, simulate: bool = False):
+        """
+        删除指定目录下的所有文件（保留子目录结构）
+        :param target_dir: 目标目录路径
+        :param simulate: 模拟删除（仅打印，不实际删除），默认False=实际删除
+        :return: True=执行成功，False=目录不存在/执行失败
+        """
+        time.sleep(2)  # 确保所有文件操作完成，避免文件被占用导致删除失败
+        # 1. 校验目录是否存在
+        if not os.path.isdir(target_dir):
+            error = f"❌ 目录不存在：{target_dir}"
+            print(error)
+            return False, error
 
+        # 2. 遍历目录下所有内容
+        deleted_count = 0
+        for file_name in os.listdir(target_dir):
+            file_path = os.path.join(target_dir, file_name)
+            
+            # 仅处理文件（跳过子目录）
+            if os.path.isfile(file_path):
+                try:
+                    if simulate:
+                        error = f"📝 模拟删除文件：{file_path}"
+                        print(error)
+                    else:
+                        os.remove(file_path)  # 删除文件
+                        print(f"✅ 已删除文件：{file_path}")
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"⚠️ 删除失败：{file_path}，错误：{e}")
+
+        print(f"\n📊 执行完成：共扫描{len(os.listdir(target_dir))}个条目，尝试删除{deleted_count}个文件")
+        return True, None
     @staticmethod
     def copy_file(src_path: str, dest_path: str, overwrite: bool = False) -> bool:
         """
