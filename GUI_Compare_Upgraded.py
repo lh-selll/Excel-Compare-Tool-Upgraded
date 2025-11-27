@@ -61,8 +61,8 @@ class ExcelFileHandler:
         """打开Excel文件，支持.xls/.xlsx/.xlsm/.csv格式"""
         # 加载一个 Excel 文件
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            file_name = os.path.basename(file_path).split(".")[0]
+            ext = os.path.splitext(file_path)[1].lower()                # 获取文件扩展名
+            file_name = os.path.basename(file_path).replace(ext, "")    # 获取文件名（不含路径和扩展名）
             # dirname = os.path.dirname(file_path)+"\\temp\\"
             temp_file_path = TEMP_DIR + file_name + "_temp" + ext
             print(f"正在打开文件: {file_path}，临时文件路径: {temp_file_path}")
@@ -104,12 +104,12 @@ class ExcelFileHandler:
                             break
                         except UnicodeDecodeError:
                             if encoding == encodings[-1]:
-                                return None, "无法识别文件编码，请检查文件格式"
+                                return None, "⚠️ 无法识别文件编码，请检查文件格式"
                             else:
                                 continue
                 
                 except Exception as e:
-                    return None, f"读取文件出错: {str(e)}"
+                    return None, f"⚠️ 读取文件出错: {str(e)}"
                 # 直接创建openpyxl工作簿并写入数据（无临时文件）
                 wb = openpyxl.Workbook()
                 ws = wb.active
@@ -127,21 +127,21 @@ class ExcelFileHandler:
                 wb = openpyxl.load_workbook(temp_file_path, keep_vba=True, read_only=read_only_flag, data_only=True)
                 
         except FileNotFoundError:
-            error = f"文件 {temp_file_path} 不存在。"
+            error = f"⚠️ 文件 {temp_file_path} 不存在。"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return (None, error)
         except openpyxl.utils.exceptions.InvalidFileException:
-            error = f"文件 {temp_file_path} 不是有效的 Excel 文件, 请重新输入"
+            error = f"⚠️ 文件 {temp_file_path} 不是有效的 Excel 文件, 请重新输入"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return (None, error)
         except Exception as e:
-            error = f"发生了未知错误：{e}"
+            error = f"⚠️ 发生了未知错误：{e}"
             print(error)
             # ctypes.windll.user32.MessageBoxW(None, error, "错误信息", 0x00000010)
             return (None, error)
-        FileHandler.delete_file(temp_file_path)
+        # FileHandler.delete_file(temp_file_path)
         return (wb, None)
 
     @staticmethod
@@ -1919,36 +1919,49 @@ class DataProcessingTool(QMainWindow):
     
     def table_row_number_changed(self):
         """用户修改表格行数时执行"""
-        self.table_row_number = int(self.table_row_number_combo.currentText())
-        
-        tab_index = self.tab_widget.indexOf(self.Compare_Config)
-        if tab_index != -1:
-            # 删除 "Compare Config" 选项卡
-            self.tab_widget.removeTab(tab_index)
-        # 重新创建 Compare_Config 页面
-        self.Compare_Config = QWidget()
-        self.Compare_Config.setStyleSheet("""
-            font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-            font-size: 11px;       /* 设置字体大小为14px */
-            font-weight: 400;      /* 设置字体粗细为中等（500） */
-        """)
-        self.init_no_mapping_tab()
-        # 添加新的 "Compare Config" 选项卡
-        self.table_heigh = self.table_row_number * self.table_row_height+100  # table的高度
-        self.tab_widget.setMinimumHeight(self.table_heigh)
-        self.tab_widget.setMaximumHeight(self.table_heigh)
-        self.tab_widget.addTab(self.Compare_Config, "Compare Config")
-        # sheet列重新添加选项
-        if self.file1_selector.get_file_path():
-            self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
-        if self.file2_selector.get_file_path():
-            self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 1, self.wb2.sheetnames)
-        # self.restored_config_data.update_row_number(self.table_row_number)
-        whole_size = self.path_edit_height*2+self.table_heigh+self.select_edit_heigh+20+self.progress_bar_heigh+self.current_task_label_height
-        self.on_tab_widget_resize(whole_size)
-        self.button_up.setEnabled(0)
-        self.button_down.setEnabled(0)
-        self.button_log.setEnabled(0)
+        try:
+            self.table_row_number = int(self.table_row_number_combo.currentText())
+            
+            tab_index = self.tab_widget.indexOf(self.Compare_Config)
+            if tab_index != -1:
+                # 删除 "Compare Config" 选项卡
+                self.tab_widget.removeTab(tab_index)
+            # 重新创建 Compare_Config 页面
+            self.Compare_Config = QWidget()
+            self.Compare_Config.setStyleSheet("""
+                font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+                font-size: 11px;       /* 设置字体大小为14px */
+                font-weight: 400;      /* 设置字体粗细为中等（500） */
+            """)
+            self.init_no_mapping_tab()
+            # 添加新的 "Compare Config" 选项卡
+            self.table_heigh = self.table_row_number * self.table_row_height+100  # table的高度
+            self.tab_widget.setMinimumHeight(self.table_heigh)
+            self.tab_widget.setMaximumHeight(self.table_heigh)
+            self.tab_widget.addTab(self.Compare_Config, "Compare Config")
+            # sheet列重新添加选项
+            if self.file1_selector.get_file_path():
+                self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 0, self.wb1.sheetnames)
+            if self.file2_selector.get_file_path():
+                self.add_addItems_for_combo(self.table_row_number, self.Compare_Config_table, 1, self.wb2.sheetnames)
+            # self.restored_config_data.update_row_number(self.table_row_number)
+            whole_size = self.path_edit_height*2+self.table_heigh+self.select_edit_heigh+20+self.progress_bar_heigh+self.current_task_label_height
+            self.on_tab_widget_resize(whole_size)
+        except ValueError:
+            self.logger.error("无效的行数输入，请输入一个有效的整数。")
+            self.current_task_edit.appendPlainText("无效的行数输入，请输入一个有效的整数。")
+            return
+        except Exception as e:
+            self.logger.error(f"修改表格行数时发生错误: {e}")
+            self.current_task_edit.appendPlainText(f"修改表格行数时发生错误: {e}")
+            return
+        finally:
+            # 健壮性改进 8: 确保按钮状态被正确重置
+            self.button_up.setEnabled(False)
+            self.button_down.setEnabled(False)
+            self.button_log.setEnabled(False)
+            self.logger.info(f"表格行数已更新为 {self.table_row_number} 行。")
+            self.current_task_edit.appendPlainText(f"表格行数已更新为 {self.table_row_number} 行。")
 
     def on_tab_widget_resize(self, whole_size):
         # 获取当前窗口大小
@@ -2025,96 +2038,109 @@ class DataProcessingTool(QMainWindow):
 
         
     def get_title_list(self, sheet1, sheet2, title_row_number):
-        title_row_values1 = list(next(sheet1.iter_rows(min_row=title_row_number, max_row=title_row_number, values_only=True)))
-        title_row_values2 = list(next(sheet2.iter_rows(min_row=title_row_number, max_row=title_row_number, values_only=True)))
-        title_list = []
-        for value1 in title_row_values1:
-            for value2 in title_row_values2:
-                # self.logger.info(f"value1 = {value1}, value2 = {value2}")
-                if str(value1) == str(value2) and str(value1) and value1 != None:
-                    title_list.append(str(value1))
-                    break
+        try:
+            title_row_values1 = list(next(sheet1.iter_rows(min_row=title_row_number, max_row=title_row_number, values_only=True)))
+            title_row_values2 = list(next(sheet2.iter_rows(min_row=title_row_number, max_row=title_row_number, values_only=True)))
+            title_list = []
+            for value1 in title_row_values1:
+                for value2 in title_row_values2:
+                    # self.logger.info(f"value1 = {value1}, value2 = {value2}")
+                    text1 = str(value1).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
+                    text2 = str(value1).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
+                    if text1 == text2 and text1 and value1 != None:
+                        title_list.append(value1)
+                        break
 
-        self.logger.info(f"title_list = {title_list}")
-        return title_list
+            self.logger.info(f"title_list = {title_list}")
+            return title_list
+        except Exception as e:
+            self.logger.error(f"⚠️ 获取标题列表时发生错误: {e}", exc_info=True)
+            return []  # 返回空列表以避免后续操作出错
     
     def mapping_status_changed(self, table, row):
         """Mapping title选择事件处理"""
-        mapping_combo = table.cellWidget(row, self.mapping_option)
-        mapping_value = mapping_combo.currentText()
-        header_spin = table.cellWidget(row, self.title_rows)
-        
-        if mapping_value == 'Y':
-            # 启用表头行数输入
-            header_spin.setEnabled(True)
-            # 获取index列的选项卡list
-            sheet1_name = table.cellWidget(row, 0).currentText()
-            sheet2_name = table.cellWidget(row, 1).currentText()
-            self.logger.info(f"sheet1_name ={sheet1_name}")
-            self.logger.info(f"sheet2_name ={sheet2_name}")
-            if sheet1_name and sheet2_name:
-                #获取标题行数
-                title_rows_number = header_spin.value()
+        try:
+            mapping_combo = table.cellWidget(row, self.mapping_option)
+            mapping_value = mapping_combo.currentText()
+            header_spin = table.cellWidget(row, self.title_rows)
+            if mapping_value == 'Y':
+                # 启用表头行数输入
+                header_spin.setEnabled(True)
+                # 获取index列的选项卡list
+                sheet1_name = table.cellWidget(row, 0).currentText()
+                sheet2_name = table.cellWidget(row, 1).currentText()
+                self.logger.info(f"sheet1_name ={sheet1_name}")
+                self.logger.info(f"sheet2_name ={sheet2_name}")
+                if sheet1_name and sheet2_name:
+                    #获取标题行数
+                    title_rows_number = header_spin.value()
+                    
+                    # 基于第index个索引框内容，查找两个sheet中一致的title名称list
+                    self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
+                    
+                    # 将索引列/数据列转换为带搜索功能的下拉框
+                    for col in range(self.index_col_position[0], (self.index_col_position[1]+1)):
+                        # 移除现有控件
+                        old_widget = table.cellWidget(row, col)
+                        if old_widget:
+                            table.removeCellWidget(row, col)
+                        
+                        # 创建下拉框 - 可编辑，带搜索功能
+                        combo = QComboBox()
+                        combo.setEditable(True)
+                        combo.addItem("")  # 添加空选项
+
+                        combo.addItems(self.title_list) #将所有title放入index的选项中
+                        combo.setCurrentIndex(0)  # 默认选择空项
+                        
+                        # 设置自动补全功能
+                        completer = QCompleter(self.title_list)
+                        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # 不区分大小写
+                        completer.setFilterMode(Qt.MatchFlag.MatchContains)  # 包含匹配
+                        combo.setCompleter(completer)
+                        
+                        # 设置只能选择列表中的值
+                        def validate_input(combo=combo):
+                            text = combo.currentText()
+                            if text not in self.title_list:
+                                # 如果输入不在选项中，重置为之前的值
+                                index = combo.findText(text, Qt.MatchFlag.MatchExactly)
+                                if index == -1:
+                                    combo.setCurrentIndex(0)  # 重置为空选项
+                                else:
+                                    combo.setCurrentIndex(index)
+                        
+                        # 连接编辑完成信号
+                        combo.lineEdit().editingFinished.connect(validate_input)
+                        table.setCellWidget(row, col, combo)
+            else:
+                # 禁用表头行数并重置
+                header_spin.setEnabled(False)
+                header_spin.setValue(1)
                 
-                # 基于第index个索引框内容，查找两个sheet中一致的title名称list
-                self.title_list = self.get_title_list(self.wb1[sheet1_name], self.wb2[sheet2_name], title_rows_number)
-                
-                # 将索引列/数据列转换为带搜索功能的下拉框
+                # 将下拉框转换为文本框
                 for col in range(self.index_col_position[0], (self.index_col_position[1]+1)):
                     # 移除现有控件
                     old_widget = table.cellWidget(row, col)
                     if old_widget:
                         table.removeCellWidget(row, col)
                     
-                    # 创建下拉框 - 可编辑，带搜索功能
-                    combo = QComboBox()
-                    combo.setEditable(True)
-                    combo.addItem("")  # 添加空选项
-
-                    combo.addItems(self.title_list) #将所有title放入index的选项中
-                    combo.setCurrentIndex(0)  # 默认选择空项
-                    
-                    # 设置自动补全功能
-                    completer = QCompleter(self.title_list)
-                    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # 不区分大小写
-                    completer.setFilterMode(Qt.MatchFlag.MatchContains)  # 包含匹配
-                    combo.setCompleter(completer)
-                    
-                    # 设置只能选择列表中的值
-                    def validate_input(combo=combo):
-                        text = combo.currentText()
-                        if text not in self.title_list:
-                            # 如果输入不在选项中，重置为之前的值
-                            index = combo.findText(text, Qt.MatchFlag.MatchExactly)
-                            if index == -1:
-                                combo.setCurrentIndex(0)  # 重置为空选项
-                            else:
-                                combo.setCurrentIndex(index)
-                    
-                    # 连接编辑完成信号
-                    combo.lineEdit().editingFinished.connect(validate_input)
-                    table.setCellWidget(row, col, combo)
-        else:
-            # 禁用表头行数并重置
-            header_spin.setEnabled(False)
-            header_spin.setValue(1)
-            
-            # 将下拉框转换为文本框
-            for col in range(self.index_col_position[0], (self.index_col_position[1]+1)):
-                # 移除现有控件
-                old_widget = table.cellWidget(row, col)
-                if old_widget:
-                    table.removeCellWidget(row, col)
-                
-                # 创建文本框
-                line_edit = QLineEdit()
-                line_edit.setValidator(UpperCaseValidator())
-                line_edit.setPlaceholderText("输入大写字母")
-                table.setCellWidget(row, col, line_edit)
-        
-        self.button_up.setEnabled(0)
-        self.button_down.setEnabled(0)
-        self.button_log.setEnabled(0)
+                    # 创建文本框
+                    line_edit = QLineEdit()
+                    line_edit.setValidator(UpperCaseValidator())
+                    line_edit.setPlaceholderText("输入大写字母")
+                    table.setCellWidget(row, col, line_edit)
+        except Exception as e:
+            self.logger.error(f"⚠️ 处理映射状态变更时发生错误: {e}", exc_info=True)
+            # 在 UI 上通知用户发生了错误
+            # QMessageBox.critical(self, "严重错误", f"处理失败: {e}\n请查看日志获取详情。")
+        finally:
+            # 健壮性改进 9: 状态重置的可靠性
+            # 无论成功还是失败，都确保按钮状态被正确重置
+            self.logger.info(f"第 {row} 行映射状态变更事件处理完毕。")
+            self.button_up.setEnabled(0)
+            self.button_down.setEnabled(0)
+            self.button_log.setEnabled(0)
 
     def on_comparison_finished(self, complete_flag):   #线程完成的槽函数，当进度达到100%时或用户强制终止时发射信号调用
         self.set_button_status("开始处理")
@@ -2310,7 +2336,7 @@ class DataProcessingTool(QMainWindow):
                 - 如果是mapping模式，表头行数需大于0
                 '''
             )
-            QMessageBox.critical(self, "配置错误", error)
+            QMessageBox.critical(self, "⚠️ 配置错误", error)
             return 0
         
         # 显示进度条
