@@ -1975,6 +1975,7 @@ class DataProcessingTool(QMainWindow):
 
     def sheet_selected(self, table, row):
         """Sheet名称选择事件处理"""
+        print("sheet_selected")
         sheet1 = table.cellWidget(row, 0).currentText()
         sheet2 = table.cellWidget(row, 1).currentText()
         # 当两个sheet都选择后启用其他控件
@@ -2046,7 +2047,7 @@ class DataProcessingTool(QMainWindow):
                 for value2 in title_row_values2:
                     # self.logger.info(f"value1 = {value1}, value2 = {value2}")
                     text1 = str(value1).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
-                    text2 = str(value1).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
+                    text2 = str(value2).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
                     if text1 == text2 and text1 and value1 != None:
                         title_list.append(value1)
                         break
@@ -2059,12 +2060,14 @@ class DataProcessingTool(QMainWindow):
     
     def mapping_status_changed(self, table, row):
         """Mapping title选择事件处理"""
+        print("mapping_status_changed")
         try:
             mapping_combo = table.cellWidget(row, self.mapping_option)
             mapping_value = mapping_combo.currentText()
             header_spin = table.cellWidget(row, self.title_rows)
             if mapping_value == 'Y':
                 # 启用表头行数输入
+                print("启用表头行数输入")
                 header_spin.setEnabled(True)
                 # 获取index列的选项卡list
                 sheet1_name = table.cellWidget(row, 0).currentText()
@@ -2091,6 +2094,7 @@ class DataProcessingTool(QMainWindow):
                         combo.addItem("")  # 添加空选项
 
                         combo.addItems(self.title_list) #将所有title放入index的选项中
+                        print(f"self.title_list ={self.title_list}")
                         combo.setCurrentIndex(0)  # 默认选择空项
                         
                         # 设置自动补全功能

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel对比工具使用指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#6B7280',
+                        accent: '#36D399',
+                        warning: '#FBBD23',
+                        danger: '#F87272',
+                        light: '#F9FAFB',
+                        dark: '#1F2937'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .section-fade {
+                opacity: 0;
+                transform: translateY(20px);
+                transition: opacity 0.6s ease, transform 0.6s ease;
+            }
+            .section-fade.active {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .table-hover tr:hover {
+                background-color: rgba(22, 93, 255, 0.05);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+    <!-- 顶部导航 -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-file-excel-o text-primary text-2xl"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-primary">Excel对比工具</h1>
+            </div>
+            <nav class="hidden md:flex space-x-6">
+                <a href="#interface" class="text-gray-600 hover:text-primary transition-colors">主界面介绍</a>
+                <a href="#steps" class="text-gray-600 hover:text-primary transition-colors">使用步骤</a>
+                <a href="#notes" class="text-gray-600 hover:text-primary transition-colors">注意事项</a>
+            </nav>
+            <button class="md:hidden text-gray-600" id="mobileMenuBtn">
+                <i class="fa fa-bars text-xl"></i>
+            </button>
+        </div>
+        <!-- 移动端菜单 -->
+        <div id="mobileMenu" class="hidden md:hidden bg-white border-t">
+            <div class="container mx-auto px-4 py-2 flex flex-col space-y-3">
+                <a href="#interface" class="py-2 text-gray-600 hover:text-primary transition-colors">主界面介绍</a>
+                <a href="#steps" class="py-2 text-gray-600 hover:text-primary transition-colors">使用步骤</a>
+                <a href="#notes" class="py-2 text-gray-600 hover:text-primary transition-colors">注意事项</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- 简介卡片 -->
+        <section class="bg-gradient-to-r from-primary/90 to-primary text-white rounded-xl shadow-lg p-6 mb-10 text-center section-fade">
+            <h2 class="text-2xl md:text-3xl font-bold mb-4">使用指南</h2>
+            <p class="text-white/90 max-w-2xl mx-auto">快速掌握Excel对比工具的核心功能和操作流程，高效完成Excel文件对比任务</p>
+        </section>
+
+        <!-- 主界面介绍 -->
+        <section id="interface" class="mb-16 section-fade">
+            <div class="flex items-center space-x-2 mb-6">
+                <i class="fa fa-desktop text-primary text-xl"></i>
+                <h2 class="text-2xl font-bold text-gray-800">主界面介绍</h2>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <p class="text-gray-600 mb-6">打开程序后，主界面包含以下核心区域，各区域功能清晰明确：</p>
+                
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- 界面区域卡片 -->
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-eraser text-warning"></i>
+                            <h3 class="font-semibold text-lg">一键清空配置按钮</h3>
+                        </div>
+                        <p class="text-gray-600">点击"One-click clear"按钮，可快速清空所有配置信息和文件选择信息</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-file-excel-o text-primary"></i>
+                            <h3 class="font-semibold text-lg">文件选择区域</h3>
+                        </div>
+                        <p class="text-gray-600">分别选择"文件1"和"文件2"，支持.xlsx、.xls、.xlsm和.csv格式文件</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-cog text-accent"></i>
+                            <h3 class="font-semibold text-lg">选项卡区域</h3>
+                        </div>
+                        <p class="text-gray-600">包含"Compare Config"选项卡，用于配置对比相关的详细信息</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-play-circle text-success"></i>
+                            <h3 class="font-semibold text-lg">进度和按钮区域</h3>
+                        </div>
+                        <p class="text-gray-600">包含进度条和"开始处理"按钮，支持开始/停止对比处理操作</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-list-alt text-primary"></i>
+                            <h3 class="font-semibold text-lg">结果区域</h3>
+                        </div>
+                        <p class="text-gray-600">实时显示对比处理的结果信息，对比完成后告知输出文件保存路径</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-tasks text-secondary"></i>
+                            <h3 class="font-semibold text-lg">当前Task区域</h3>
+                        </div>
+                        <p class="text-gray-600">实时显示当前正在执行的任务信息，便于了解处理进度</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 使用步骤 -->
+        <section id="steps" class="mb-16 section-fade">
+            <div class="flex items-center space-x-2 mb-6">
+                <i class="fa fa-list-ol text-primary text-xl"></i>
+                <h2 class="text-2xl font-bold text-gray-800">使用步骤</h2>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <!-- 步骤导航 -->
+                <div class="flex flex-wrap mb-8 border-b border-gray-200">
+                    <button class="step-btn active px-4 py-2 font-medium text-primary border-b-2 border-primary" data-step="1">1. 选择文件</button>
+                    <button class="step-btn px-4 py-2 font-medium text-gray-500 hover:text-primary transition-colors" data-step="2">2. 配置对比信息</button>
+                    <button class="step-btn px-4 py-2 font-medium text-gray-500 hover:text-primary transition-colors" data-step="3">3. 开始对比</button>
+                    <button class="step-btn px-4 py-2 font-medium text-gray-500 hover:text-primary transition-colors" data-step="4">4. 查看结果</button>
+                    <button class="step-btn px-4 py-2 font-medium text-gray-500 hover:text-primary transition-colors" data-step="5">5. 其他操作</button>
+                </div>
+
+                <!-- 步骤内容 -->
+                <div class="step-content" id="step1">
+                    <div class="flex items-start space-x-3 mb-4">
+                        <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mt-1 flex-shrink-0">1</div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-3">选择文件</h3>
+                            <ul class="text-gray-600 space-y-2">
+                                <li>在文件选择区域，分别点击"文件1"和"文件2"后的"浏览"按钮</li>
+                                <li>选择需要对比的两个Excel文件，支持格式：.xlsx、.xls、.xlsm、.csv</li>
+                                <li>选择文件后，程序会自动获取文件中的工作表名称</li>
+                                <li>根据文件的sheet数量，设置需要对比的sheet数量</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 mt-4">
+                        <p class="text-gray-700 font-medium mb-2">提示：</p>
+                        <p class="text-gray-600">选择文件后，工作表名称会自动填充到"Compare Config"选项卡中，供后续选择</p>
+                    </div>
+                </div>
+
+                <div class="step-content hidden" id="step2">
+                    <div class="flex items-start space-x-3 mb-4">
+                        <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mt-1 flex-shrink-0">2</div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-3">配置对比信息</h3>
+                            <p class="text-gray-600 mb-4">进入"Compare Config"选项卡，按以下步骤完成配置：</p>
+                            
+                            <h4 class="font-medium text-lg mb-2 text-gray-800">1. 选择工作表</h4>
+                            <ul class="text-gray-600 space-y-1 mb-4">
+                                <li>在"文件1-sheet"和"文件2-sheet"列中，分别选择要对比的工作表</li>
+                                <li>两个工作表都选择后，其他列的配置控件将自动启用</li>
+                            </ul>
+
+                            <h4 class="font-medium text-lg mb-2 text-gray-800">2. 选择对比模式</h4>
+                            <div class="grid md:grid-cols-2 gap-4 mb-4">
+                                <div class="border border-gray-200 rounded-lg p-3">
+                                    <p class="font-medium text-primary mb-1">N（不映射）</p>
+                                    <p class="text-gray-600 text-sm">直接根据索引列进行对比，索引列需输入大写字母表示列号（如"A"、"B"）</p>
+                                </div>
+                                <div class="border border-gray-200 rounded-lg p-3">
+                                    <p class="font-medium text-primary mb-1">Y（映射）</p>
+                                    <p class="text-gray-600 text-sm">按表头映射对比，需指定表头行数，索引列从一致的表头名称中选择</p>
+                                </div>
+                            </div>
+
+                            <h4 class="font-medium text-lg mb-2 text-gray-800">3. 指定索引列</h4>
+                            <ul class="text-gray-600 space-y-1">
+                                <li>支持设置1-3个索引列，可选择多列组合作为索引列</li>
+                                <li>不映射模式：直接输入大写字母列号</li>
+                                <li>映射模式：从下拉框中选择一致的表头名称</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-content hidden" id="step3">
+                    <div class="flex items-start space-x-3 mb-4">
+                        <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mt-1 flex-shrink-0">3</div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-3">开始对比</h3>
+                            <ul class="text-gray-600 space-y-2">
+                                <li>确认所有配置信息完整无误后，点击"开始处理"按钮</li>
+                                <li>处理过程中，进度条会实时显示处理进度</li>
+                                <li>"当前正在执行的Task区域"会显示实时任务信息</li>
+                                <li>如需终止对比，可点击"停止处理"按钮中断进程</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="bg-warning/10 rounded-lg p-4 border border-warning/30 mt-4">
+                        <p class="text-warning font-medium mb-2 flex items-center">
+                            <i class="fa fa-exclamation-triangle mr-2"></i> 注意
+                        </p>
+                        <p class="text-gray-600">停止对比会终止当前进程，已处理的数据可能无法保存，请谨慎操作</p>
+                    </div>
+                </div>
+
+                <div class="step-content hidden" id="step4">
+                    <div class="flex items-start space-x-3 mb-4">
+                        <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mt-1 flex-shrink-0">4</div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-3">查看结果</h3>
+                            <ul class="text-gray-600 space-y-2">
+                                <li>对比完成后，结果会显示在"结果区域"</li>
+                                <li>程序会弹出消息框提示对比完成，并告知输出文件保存路径</li>
+                                <li>输出文件格式：原文件名 - compare.xlsx</li>
+                                <li>文件默认保存在指定的outputfile文件夹中</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="bg-accent/10 rounded-lg p-4 border border-accent/30 mt-4">
+                        <p class="text-accent font-medium mb-2 flex items-center">
+                            <i class="fa fa-info-circle mr-2"></i> 提示
+                        </p>
+                        <p class="text-gray-600">建议对比完成后及时查看输出文件，确认对比结果是否符合预期</p>
+                    </div>
+                </div>
+
+                <div class="step-content hidden" id="step5">
+                    <div class="flex items-start space-x-3 mb-4">
+                        <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mt-1 flex-shrink-0">5</div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-3">其他操作</h3>
+                            
+                            <h4 class="font-medium text-lg mb-2 text-gray-800">一键清空配置</h4>
+                            <ul class="text-gray-600 space-y-1 mb-4">
+                                <li>点击"One-click clear"按钮，可清空所有配置信息和文件选择信息</li>
+                                <li>适用于需要重新配置对比任务的场景</li>
+                                <li>清空后需重新选择文件并配置对比信息</li>
+                            </ul>
+
+                            <h4 class="font-medium text-lg mb-2 text-gray-800">错误处理</h4>
+                            <ul class="text-gray-600 space-y-1">
+                                <li>处理过程中出现错误会在结果区域显示错误信息</li>
+                                <li>常见错误：文件格式不正确、配置信息不完整、工作表重复等</li>
+                                <li>根据错误提示修正后可重新发起对比</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 注意事项 -->
+        <section id="notes" class="section-fade">
+            <div class="flex items-center space-x-2 mb-6">
+                <i class="fa fa-exclamation-circle text-warning text-xl"></i>
+                <h2 class="text-2xl font-bold text-gray-800">注意事项</h2>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="border border-gray-200 rounded-lg p-5 hover:border-primary/50 transition-colors">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-file-text-o text-primary"></i>
+                            <h3 class="font-semibold">文件格式要求</h3>
+                        </div>
+                        <p class="text-gray-600">确保选择的Excel文件存在且格式正确，支持.xlsx、.xls、.xlsm和.csv格式</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:border-primary/50 transition-colors">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-check-square-o text-accent"></i>
+                            <h3 class="font-semibold">配置完整性</h3>
+                        </div>
+                        <p class="text-gray-600">至少保证一行配置完整，包括工作表名称、至少一个索引列，映射模式需指定表头行数</p>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-5 hover:border-primary/50 transition-colors">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <i class="fa fa-exclamation-triangle text-warning"></i>
+                            <h3 class="font-semibold">重复元素警告</h3>
+                        </div>
+                        <p class="text-gray-600">工作表列中存在重复元素时，程序会弹出警告框提示配置错误，请及时修正</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="flex items-center space-x-2 mb-4 md:mb-0">
+                    <i class="fa fa-file-excel-o text-primary text-2xl"></i>
+                    <span class="text-xl font-bold">Excel对比工具</span>
+                </div>
+                <div class="text-gray-400 text-sm">
+                    © 2025 Excel对比工具 | 版本：V13
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 回到顶部按钮 -->
+    <button id="backToTop" class="fixed bottom-6 right-6 bg-primary text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg opacity-0 invisible transition-all duration-300">
+        <i class="fa fa-arrow-up"></i>
+    </button>
+
+    <!-- JavaScript -->
+    <script>
+        // 移动端菜单切换
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        
+        mobileMenuBtn.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+        });
+
+        // 步骤切换
+        const stepBtns = document.querySelectorAll('.step-btn');
+        const stepContents = document.querySelectorAll('.step-content');
+        
+        stepBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // 移除所有激活状态
+                stepBtns.forEach(b => {
+                    b.classList.remove('active', 'text-primary', 'border-b-2', 'border-primary');
+                    b.classList.add('text-gray-500');
+                });
+                
+                // 添加当前激活状态
+                btn.classList.add('active', 'text-primary', 'border-b-2', 'border-primary');
+                btn.classList.remove('text-gray-500');
+                
+                // 隐藏所有内容
+                stepContents.forEach(content => {
+                    content.classList.add('hidden');
+                });
+                
+                // 显示当前内容
+                const step = btn.getAttribute('data-step');
+                document.getElementById(`step${step}`).classList.remove('hidden');
+            });
+        });
+
+        // 滚动动画
+        const sections = document.querySelectorAll('.section-fade');
+        
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.1
+        };
+        
+        const observer = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+        
+        sections.forEach(section => {
+            observer.observe(section);
+        });
+
+        // 回到顶部按钮
+        const backToTopBtn = document.getElementById('backToTop');
+        
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTopBtn.classList.remove('opacity-0', 'invisible');
+                backToTopBtn.classList.add('opacity-100', 'visible');
+            } else {
+                backToTopBtn.classList.add('opacity-0', 'invisible');
+                backToTopBtn.classList.remove('opacity-100', 'visible');
+            }
+        });
+        
+        backToTopBtn.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 80,
+                        behavior: 'smooth'
+                    });
+                    
+                    // 关闭移动端菜单
+                    if (!mobileMenu.classList.contains('hidden')) {
+                        mobileMenu.classList.add('hidden');
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
