@@ -16,3 +16,4 @@ license/license.key
 *.json
 *.xml
 /inputfile
+/license

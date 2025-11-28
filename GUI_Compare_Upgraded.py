@@ -595,7 +595,8 @@ class DataProcessor(QThread):
                         if not row[index]:
                             continue
                         else: 
-                            data.col.append(row[index])
+                            row_index = self.CompareApp.process_title_text(row[index])
+                            data.col.append(row_index)
                     
                     # 这里添加实际的数据处理逻辑
                     result = f"处理映射: {sheet1_name} -> {sheet2_name}, 列: {data.col}"
@@ -2046,10 +2047,10 @@ class DataProcessingTool(QMainWindow):
             for value1 in title_row_values1:
                 for value2 in title_row_values2:
                     # self.logger.info(f"value1 = {value1}, value2 = {value2}")
-                    text1 = str(value1).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
-                    text2 = str(value2).replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
+                    text1 = Person_ComparisonApp.process_title_text(str(value1))
+                    text2 = Person_ComparisonApp.process_title_text(str(value2))
                     if text1 == text2 and text1 and value1 != None:
-                        title_list.append(value1)
+                        title_list.append(text1)
                         break
 
             self.logger.info(f"title_list = {title_list}")

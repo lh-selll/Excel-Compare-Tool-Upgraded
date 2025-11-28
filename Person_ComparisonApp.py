@@ -60,7 +60,6 @@ class Person_ComparisonApp:
         self.result_info = None     #用于保存本次对比结果
         self.logger = logger
         # self.progress_current_task.connect(logger.info)
-        logger.info
 
 
     def check_index_repeat(self, sheet, index_value_list: List[int], title_row_number: int=0, file_name:str="") -> int:
@@ -152,15 +151,15 @@ class Person_ComparisonApp:
             if value is not None:
                 # 提前处理字符串，避免后续重复替换
                 if not isinstance(value, (int, float)):
-                    value = self._process_title_text(str(value))
+                    value = self.process_title_text(str(value))
                 else:
                     # 判断是否为整数
                     if self.is_integer(value):
                         # 整数 → 比较整数部分（忽略.0差异）
-                        value = self._process_title_text(str(int(value)))
+                        value = self.process_title_text(str(int(value)))
                     else:
                         # 有一个不是整数 → 直接比较字符串
-                        value = self._process_title_text(str(value))
+                        value = self.process_title_text(str(value))
                 merged_text += value
             
         return merged_text
@@ -315,8 +314,8 @@ class Person_ComparisonApp:
         sheet2_cell.alignment = Alignment(wrap_text=True)   #把第二个文件的单元格设为自动换行
         
         # 处理单元格值（移除特殊字符）
-        value1 = self._process_title_text(str(sheet1_cell.value))  #sheet1中对应单元格的值
-        value2 = self._process_title_text(str(sheet2_cell.value))  #sheet2中对应单元格的值
+        value1 = self.process_title_text(str(sheet1_cell.value))  #sheet1中对应单元格的值
+        value2 = self.process_title_text(str(sheet2_cell.value))  #sheet2中对应单元格的值
         
         # 空值处理
         if str(value1) == "None":
@@ -714,7 +713,7 @@ class Person_ComparisonApp:
                 
             # 获取并处理标题文本
             title_text = str(sheet2.cell(row=title_row_number, column=col2).value)
-            processed_text = self._process_title_text(title_text)
+            processed_text = self.process_title_text(title_text)
             
             if processed_text:
                 title_to_col_map[processed_text] = col2
@@ -738,7 +737,7 @@ class Person_ComparisonApp:
             
             # 获取并处理当前列的标题文本
             title_text = str(sheet1.cell(row=title_row_number, column=col1).value)
-            processed_text = self._process_title_text(title_text)
+            processed_text = self.process_title_text(title_text)
             
             # 处理空标题
             if not processed_text:
@@ -781,8 +780,9 @@ class Person_ComparisonApp:
                     )
         
         return col_mapping
-
-    def _process_title_text(self, text: str) -> str:
+    
+    @staticmethod
+    def process_title_text(text: str) -> str:
         """处理标题文本，移除特殊字符和空白"""
         return text.replace('_x000D_', '').replace('\r', '').replace('\n', '').replace(' ', '')
 
@@ -1009,6 +1009,7 @@ class Person_ComparisonApp:
         
         # 数据预处理
         title_name_list = list(dict.fromkeys(title_name_list))  # 去重并保留顺序
+        title_name_list = [self.process_title_text(title) for title in title_name_list]
         delta_progress = target_progress - current_progress
         progress_percent = current_progress
         
@@ -1016,12 +1017,12 @@ class Person_ComparisonApp:
         self.progress_current_task.emit(f"正在检查标题行(第{title_row_number}行")
         self.logger.info(f"正在检查标题行(第{title_row_number}行)重复值")
         try:
-            title_row_values1 = [str(value) for value in next(sheet1.iter_rows(
+            title_row_values1 = [self.process_title_text(str(value)) for value in next(sheet1.iter_rows(
                 min_row=title_row_number, 
                 max_row=title_row_number, 
                 values_only=True
             ))]
-            title_row_values2 = [str(value) for value in next(sheet2.iter_rows(
+            title_row_values2 = [self.process_title_text(str(value)) for value in next(sheet2.iter_rows(
                 min_row=title_row_number, 
                 max_row=title_row_number, 
                 values_only=True
@@ -1051,11 +1052,12 @@ class Person_ComparisonApp:
         index_value_list_file2 = []
         
         for title in title_name_list:
+            title_name = self.process_title_text(title)
             try:
-                index_value1 = title_row_values1.index(title)
-                index_value2 = title_row_values2.index(title)
+                index_value1 = title_row_values1.index(title_name)
+                index_value2 = title_row_values2.index(title_name)
             except ValueError:
-                raise ValueError(f"未找到标题 '{title}' 对应的列, title【{title}】的列不存在")
+                raise ValueError(f"未找到标题 '{title_name}' 对应的列, title【{title_name}】的列不存在")
             
             index_value_list_file1.append(index_value1 + 1)
             index_value_list_file2.append(index_value2 + 1)
