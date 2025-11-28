@@ -17,3 +17,5 @@ license/license.key
 *.xml
 /inputfile
 /license
+/license
+*.key
