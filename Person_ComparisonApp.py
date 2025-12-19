@@ -28,6 +28,7 @@ import pandas as pd
 from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.cell.text import InlineFont
+from openpyxl.cell.cell import Cell, MergedCell
 
 class Person_ComparisonApp:
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
@@ -230,12 +231,28 @@ class Person_ComparisonApp:
         self.logger.info(f"开始拆分")
         merged_cell_ranges = list(sheet.merged_cells.ranges)
         for merged_cell in merged_cell_ranges:
+            # 跳过已被拆分的区域（防止重复操作）
+            if merged_cell not in sheet.merged_cells.ranges:
+                continue
+            sheet.merged_cells.remove(merged_cell)
+            
+            try:
+                sheet.unmerge_cells(str(merged_cell))
+            except KeyError as e:
+                print(f"跳过空单元格拆分异常：{e}（合并区域 {merged_cell} 已标记为拆分）")
+            except Exception as e:
+                print(f"原生拆分操作警告：{e}（不影响最终拆分状态）")
+            
+            
             # self.progress_current_task.emit(f"merged_cell = {merged_cell}") self.logger.info(f"merged_cell = {merged_cell}")
             row_min = merged_cell.min_row
             row_max = merged_cell.max_row
             col_min = merged_cell.min_col
             col_max = merged_cell.max_col
-            sheet.unmerge_cells(start_row=row_min, start_column=col_min, end_row=row_max, end_column=col_max)
+            self.progress_current_task.emit(f"拆分合并单元格: row_min:{row_min} ; col_min{col_min}")
+            self.progress_current_task.emit(f"sheet_max_row:{sheet.max_row} ; sheet_max_col:{sheet.max_column}")
+            if self.process_title_text(str(sheet.cell(row=row_min, column=col_min).value)) == "" or sheet.cell(row=row_min, column=col_min).value == None:
+                sheet.cell(row=row_min, column=col_min).value = ""  # 左上角单元格为空值处理
             for row1 in range(row_min, row_max+1):
                 if self.check_thread_running():
                     return 0, None
@@ -247,12 +264,24 @@ class Person_ComparisonApp:
                         # 计算相对位置
                         index_row = row1 - row_min
                         index_col = col1 - col_min
-                        sheet.cell(row=row1, column=col1).value = sheet.cell(row=row_min, column=col_min).value
-                        # 判断是否是索引列
-                        if col1 in index_col_list: # 单元格在索引列，赋值必须唯一{左上角值+行值+列值}
-                            sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row1, column=col1).value}{index_row}{index_col}"
-                        else: # 单元格不在索引列，赋值统一为左上角值
-                            sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row1, column=col1).value}"
+                        cell = sheet.cell(row=row1, column=col1)
+                        # 判断是否为MergedCell，转换为普通Cell
+                        if isinstance(cell, MergedCell):
+                            # 方式：直接替换_cells字典中的MergedCell为普通Cell
+                            new_cell = Cell(sheet, row=row1, column=col1)
+                            sheet._cells[(row1, col1)] = new_cell
+                            cell = new_cell  # 替换为新单元格对象
+                        
+                        # 拆分后所有单元格赋值处理
+                        if sheet.cell(row=row_min, column=col_min).value == "":
+                            sheet.cell(row=row1, column=col1).value = ""    # 左上角值为空，拆分后单元格全部赋值为空
+                        else:
+                            # 判断是否是索引列
+                            if col1 in index_col_list: # 单元格在索引列，赋值必须唯一{左上角值+行值+列值}
+                                sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row_min, column=col_min).value}{index_row}{index_col}"
+                            else: # 单元格不在索引列，赋值统一为左上角值
+                                sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row_min, column=col_min).value}"
+                                
                         # 复制单元格格式
                         self.copy_cell_format(sheet, row1, col1, row_min, col_min)
         return 1
