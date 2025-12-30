@@ -390,13 +390,16 @@ class Person_ComparisonApp:
         if fill_color == self.Not_Agreed_color: # 不一致颜色
             # 处理空值
             self.logger.debug(f"对比不一致:  {cell1.value} <> {cell2.value}")
-            value1 = self.process_title_text(str(cell1.value))
-            value2 = self.process_title_text(str(cell2.value))
+            value1 = cell1.value
+            value2 = cell2.value
+
             #空值处理
-            if str(value1) == "None":
+            if value1 is None:
                 value1 = ""
-            if str(value2) == "None":
+            if value2 is None:
                 value2 = ""
+            value1 = self.process_title_text(str(value1))
+            value2 = self.process_title_text(str(value2))
                 
             """通过底层属性设置删除线，兼容更多版本"""
             # 创建InlineFont对象（不直接传strikethrough参数）
@@ -770,16 +773,16 @@ class Person_ComparisonApp:
                 )
             
             # 获取并处理当前列的标题文本
-            title_text = str(sheet1.cell(row=title_row_number, column=col1).value)
-            processed_text = self.process_title_text(title_text)
-            
+            title_text = sheet1.cell(row=title_row_number, column=col1).value
             # 处理空标题
-            if not processed_text:
-                col_mapping[col1] = 0  # 标记为未匹配
-                continue
+            if not title_text:
+                title_text = ""
+
+            processed_text = self.process_title_text(str(title_text))
             
             # 处理空行
             if not processed_text:
+                #标题为空值时
                 blank_row_count += 1
                 if blank_row_count >= 20:
                     col_mapping[col1] = 0
@@ -799,19 +802,20 @@ class Person_ComparisonApp:
                     )
                 continue
             else:
+                #标题为非空值时
                 blank_row_count = 0
-            # 在预索引中查找匹配列
-            if processed_text in title_to_col_map:
-                col_mapping[col1] = title_to_col_map[processed_text]
-            else:
-                # 未找到匹配，标记为0并设置颜色
-                col_mapping[col1] = 0
-                for row in range(1, sheet1.max_row + 1):
-                    sheet1.cell(row=row, column=col1).fill = PatternFill(
-                        start_color=self.No_match_color,
-                        end_color=self.No_match_color,
-                        fill_type="solid"
-                    )
+                # 在预索引中查找匹配列
+                if processed_text in title_to_col_map:
+                    col_mapping[col1] = title_to_col_map[processed_text]
+                else:
+                    # 未找到匹配，标记为0并设置颜色
+                    col_mapping[col1] = 0
+                    for row in range(1, sheet1.max_row + 1):
+                        sheet1.cell(row=row, column=col1).fill = PatternFill(
+                            start_color=self.No_match_color,
+                            end_color=self.No_match_color,
+                            fill_type="solid"
+                        )
         
         return col_mapping
     

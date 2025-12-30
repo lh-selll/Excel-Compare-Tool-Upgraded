@@ -19,3 +19,5 @@ license/license.key
 /license
 /license
 *.key
+/build
+/dist
