@@ -264,6 +264,8 @@ class Person_ComparisonApp:
                         # 计算相对位置
                         index_row = row1 - row_min
                         index_col = col1 - col_min
+                        # print(f"row_min, col_min  = {row_min}, {col_min}")
+                        # print(f"拆分单元格位置: row1:{row1} ; col1{col1} ; index_row:{index_row} ; index_col:{index_col}")
                         cell = sheet.cell(row=row1, column=col1)
                         # 判断是否为MergedCell，转换为普通Cell
                         if isinstance(cell, MergedCell):
@@ -279,6 +281,7 @@ class Person_ComparisonApp:
                             # 判断是否是索引列
                             if col1 in index_col_list: # 单元格在索引列，赋值必须唯一{左上角值+行值+列值}
                                 sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row_min, column=col_min).value}{index_row}{index_col}"
+                                # print(f"索引列拆分赋值: {sheet.cell(row=row1, column=col1).value}")
                             else: # 单元格不在索引列，赋值统一为左上角值
                                 sheet.cell(row=row1, column=col1).value = f"{sheet.cell(row=row_min, column=col_min).value}"
                                 
@@ -911,10 +914,12 @@ class Person_ComparisonApp:
                 #         row_mapping.pop(row, None)
                 #         self.set_rows_color(sheet1, row1, self.None_color)
                 #     break
-                    
-                # 标记为未匹配并设置颜色
-                row_mapping[row1] = 0
-                self.set_rows_color(sheet1, row1, self.No_match_color)
+                if not self.has_valid_data(sheet1, row1):
+                    row_mapping[row1] = None
+                else:
+                    # 标记为未匹配并设置颜色
+                    row_mapping[row1] = 0
+                    self.set_rows_color(sheet1, row1, self.No_match_color)
                 continue
             # blank_row_count = 0
 
@@ -980,9 +985,14 @@ class Person_ComparisonApp:
         # 4. 写入新增行数据
         for row_idx in zero_indices:
             # 注意：Excel行号从1开始，original_sheet[row_idx] 获取整行
+            # print(f"sheet[row_idx][0].value = {sheet[row_idx][0].value}")
+            sheet[row_idx][0].value = ""
+            if not self.has_valid_data(sheet, row_idx):
+                continue
             row_data = [cell.value for cell in sheet[row_idx]]
             row_data[0] = "删除行"
             added_sheet.append(row_data)
+            sheet[row_idx][0].value = "新增"
             
         # 5. 为新增行数据添加删除行标识
         for index in range(1, added_sheet.max_row+1):
@@ -1177,9 +1187,14 @@ class Person_ComparisonApp:
             
             # 获取目标行号
             row2 = index_column_mapping.get(row1, 0)
-            if row2 == 0:
+            if not row2:
                 blank_row_flag += 1
-                row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
+                if row2 == 0:
+                    row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
+                elif row2 is None:
+                    row_changed_list[row1] = 4 #表征本行是否变更的flag，4：整行为空，无色
+                else:
+                    raise ValueError(f"在列映射进程中，第{row1}列的返回值错误，index_column_mapping[{row1}] = {row2}")
                 continue
                 
             blank_row_flag = 0
@@ -1441,10 +1456,15 @@ class Person_ComparisonApp:
         for cell in sheet[row]:
             if self.check_thread_running():
                 return False
-            if cell.value is not None:
-                val_str = str(cell.value).strip()
-                if val_str != "":
-                    return True
+            
+            if isinstance(cell, MergedCell):
+                return True     # 如果单元格为merge状态，视为单元格存在有效值
+            else:
+                # 单元格非merge状态
+                if cell.value is not None:
+                    val_str = self.process_title_text(str(cell.value))
+                    if val_str != "":
+                        return True
         return False
     
     def find_last_valid_row(self, sheet, threshold=2000, tail_check_limit=400):
@@ -1500,7 +1520,7 @@ class Person_ComparisonApp:
             if str(last_valid) == "None":
                 return 0, "用户终止对比进程"
             max_row = sheet.max_row
-            
+            print(f"last_valid = {last_valid}, max_row = {max_row}")
             if last_valid < max_row and last_valid > 0:
                 delete_count = max_row - last_valid
                 sheet.delete_rows(last_valid + 1, delete_count)
