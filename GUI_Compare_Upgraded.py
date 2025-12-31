@@ -892,7 +892,6 @@ class DataProcessor(QThread):
                 self.signal_list.progress_current_task.emit(f"{compare_info_file_path}文件追加错误")
                 self.logger.info(f"{compare_info_file_path}文件追加错误")
 
-            self.signal_list.comparison_finished.emit("success")
             self.signal_list.progress_updated.emit(100)
             timestamp = time.time()
             local_time = time.localtime(timestamp)
@@ -903,10 +902,11 @@ class DataProcessor(QThread):
             self.logger.info("/*************************************************结束任务*******************************************************/")
             # ctypes.windll.user32.MessageBoxW(None, f"对比完成，输出文件在“{output_path}”文件夹中", "成功信息", 0x00000040)
             success = f"对比完成，输出文件在“{output_path}”文件夹中"
+            self.signal_list.error_occurred.emit("SUCCESS", success, None)  # 弹出成功信息窗口
             self.logger.info(success)
-            self.logger.task_finished()
-            self.signal_list.error_occurred.emit("SUCCESS", success, None)
-            time.sleep(0.2)
+            self.signal_list.comparison_finished.emit("success")    # 对比完成信号, on_comparison_finished槽函数完成按钮使能、断开所有信号等操作
+            self.logger.task_finished() # 手动刷新缓存，保证记录任务完成日志
+            time.sleep(1.5) # 等待，确保日志缓存刷新完成
             fileappend_content = FileHandler.read_text_file(log_file_path)
 
             if fileappend_content is None:
@@ -2392,6 +2392,8 @@ class DataProcessingTool(QMainWindow):
     def show_error(self, type, error, sub_thread):
         """显示错误信息"""
         type = type.lower()
+        print(f"收到show_error type={type} 信号, error={error}")
+        # time.sleep(1)  # 确保消息框在文本更新后显示
         if type == "warning":
             self.result_text_edit.setHtml(f"<font color='orange'>{error}</font>")
             QMessageBox.warning(self, "处理警告", error)
