@@ -392,7 +392,6 @@ class Person_ComparisonApp:
         )
         if fill_color == self.Not_Agreed_color: # 不一致颜色
             # 处理空值
-            self.logger.debug(f"对比不一致:  {cell1.value} <> {cell2.value}")
             value1 = cell1.value
             value2 = cell2.value
 
@@ -401,8 +400,7 @@ class Person_ComparisonApp:
                 value1 = ""
             if value2 is None:
                 value2 = ""
-            value1 = self.process_title_text(str(value1))
-            value2 = self.process_title_text(str(value2))
+            self.logger.debug(f"对比不一致:  \n{value1} \n↑ ↑ ↑\n{value2}\n")
                 
             """通过底层属性设置删除线，兼容更多版本"""
             # 创建InlineFont对象（不直接传strikethrough参数）
