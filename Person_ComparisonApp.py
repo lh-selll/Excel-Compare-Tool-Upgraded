@@ -390,6 +390,13 @@ class Person_ComparisonApp:
             end_color   = fill_color, 
             fill_type="solid"
         )
+        # 设置左对齐
+        cell1.alignment = Alignment(
+            horizontal="left",    # 水平左对齐（关键）
+            vertical="center",    # 垂直居中（可选，推荐）
+            wrap_text=True       # 自动换行（按需开启）
+        )
+
         if fill_color == self.Not_Agreed_color: # 不一致颜色
             # 处理空值
             value1 = cell1.value
@@ -801,6 +808,12 @@ class Person_ComparisonApp:
                         end_color=self.No_match_color,
                         fill_type="solid"
                     )
+                    # 设置左对齐
+                    sheet1.cell(row=row, column=col1).alignment = Alignment(
+                        horizontal="left",    # 水平左对齐（关键）
+                        vertical="center",    # 垂直居中（可选，推荐）
+                        wrap_text=True       # 自动换行（按需开启）
+                    )
                 continue
             else:
                 #标题为非空值时
@@ -817,7 +830,12 @@ class Person_ComparisonApp:
                             end_color=self.No_match_color,
                             fill_type="solid"
                         )
-        
+                        # 设置左对齐
+                        sheet1.cell(row=row, column=col1).alignment = Alignment(
+                            horizontal="left",    # 水平左对齐（关键）
+                            vertical="center",    # 垂直居中（可选，推荐）
+                            wrap_text=True       # 自动换行（按需开启）
+                        )
         return col_mapping
     
     @staticmethod
@@ -959,7 +977,13 @@ class Person_ComparisonApp:
                     end_color=color,
                     fill_type="solid"
                 )
-                
+                # 设置左对齐
+                sheet.cell(row=target_row, column=col).alignment = Alignment(
+                    horizontal="left",    # 水平左对齐（关键）
+                    vertical="center",    # 垂直居中（可选，推荐）
+                    wrap_text=True       # 自动换行（按需开启）
+                )
+
         except ValueError as e:
             # 捕获并重新抛出值错误，保留原始错误信息
             raise ValueError(f"填充行颜色失败: {str(e)}") from e
