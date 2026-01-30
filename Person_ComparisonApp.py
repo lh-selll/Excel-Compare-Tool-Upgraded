@@ -30,7 +30,15 @@ from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.cell.text import InlineFont
 from openpyxl.cell.cell import Cell, MergedCell
 
+
+title_font = Font(name="微软雅黑", size=14, bold=True, color="000000")        #默认字体
+title_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+text_font = Font(name="微软雅黑", size=11, bold=False, color="006633")
+text_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
 class Person_ComparisonApp:
+    global text_font, text_align, title_font, title_align
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
     # 类的构造函数，用于初始化对象的属性
     def __init__(self, signal_list, logger, output_path=None):
@@ -53,10 +61,12 @@ class Person_ComparisonApp:
         self.output_path = output_path                    # 输出文件路径
         self.Progress_percent = 0                         # 当前进度百分比
         self.Agreed_color = "AFFFAF"  # 一致时填充色（浅绿色）
-        self.Not_Agreed_color = "C04255"  # 不一致时填充色（红色）
-        self.No_match_color = "00FFFF"  # 未匹配时填充色（青色）
+        self.Not_Agreed_color = "E57373"  # 不一致时填充色（红色）
+        self.No_match_color = "D3E3FD"  # 未匹配时填充色（青色）
         self.None_color = "FFFFFF"  # 空值填充色（白色）
         self.Delete_color = "696969"  # 删除行填充色（灰色）
+        self.Title_row_color = "F5F5F5"  # 标题行填充色（浅灰）
+
         self.update_frequency = 30  # 状态更新频率，防止UI卡顿
         self.result_info = None     #用于保存本次对比结果
         self.logger = logger
@@ -949,9 +959,9 @@ class Person_ComparisonApp:
                 self.set_rows_color(sheet1, row1, self.No_match_color)
         return row_mapping
     
-    def set_rows_color(self, sheet, target_row, color):
+    def set_rows_color(self, sheet, target_row, color, font=None, alignment=None):
         """
-        设置整列的颜色
+        设置整行的颜色
         
         Args:
             sheet1: 要设置的工作表对象
@@ -977,12 +987,18 @@ class Person_ComparisonApp:
                     end_color=color,
                     fill_type="solid"
                 )
-                # 设置左对齐
-                sheet.cell(row=target_row, column=col).alignment = Alignment(
-                    horizontal="left",    # 水平左对齐（关键）
-                    vertical="center",    # 垂直居中（可选，推荐）
-                    wrap_text=True       # 自动换行（按需开启）
-                )
+
+                # 设置对齐方式
+                if alignment:
+                    sheet.cell(row=target_row, column=col).alignment = alignment
+                else:
+                    sheet.cell(row=target_row, column=col).alignment = text_align
+
+                # 设置字体
+                if font:
+                    sheet.cell(row=target_row, column=col).font = font
+                else:
+                    sheet.cell(row=target_row, column=col).font = text_font
 
         except ValueError as e:
             # 捕获并重新抛出值错误，保留原始错误信息
@@ -1247,6 +1263,10 @@ class Person_ComparisonApp:
         end_time_output = f"单元格对比耗时: {end_time - col_mapping_time}s"
         self.logger.info(end_time_output)
         
+        # 设置标题行颜色
+        for rows in range(1, title_row_number + 1):
+            self.set_rows_color(sheet1, rows, self.Title_row_color, font=title_font, alignment=title_align)
+
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
         一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
@@ -1317,9 +1337,9 @@ class Person_ComparisonApp:
             )
             # 设置对齐方式
             sheet.cell(row=title_row_number, column=1).alignment = Alignment(
-                horizontal='center',  # 水平居中
-                vertical='center',    # 垂直居中
-                wrap_text=True        # 自动换行
+                horizontal='left',      # 水平左对齐
+                vertical='center',      # 垂直居中
+                wrap_text=True          # 自动换行
             )
             # 设置边框
             sheet.cell(row=title_row_number, column=1).border = thin_border
@@ -1360,7 +1380,7 @@ class Person_ComparisonApp:
             )
             # 设置对齐方式
             sheet.cell(row=key, column=1).alignment = Alignment(
-                horizontal='center',  # 水平居中
+                horizontal='left',  # 水平左对齐
                 vertical='center',    # 垂直居中
                 wrap_text=True        # 自动换行
             )
