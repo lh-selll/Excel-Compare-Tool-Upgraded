@@ -34,11 +34,17 @@ from openpyxl.cell.cell import Cell, MergedCell
 title_font = Font(name="微软雅黑", size=14, bold=True, color="000000")        #默认字体
 title_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-text_font = Font(name="微软雅黑", size=11, bold=False, color="006633")
+text_font = Font(name="微软雅黑", size=11, bold=False, color="000000")
 text_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+blank_number        = 0
+agree_number        = 1
+not_agree_number    = 2
+add_number          = 3
 
 class Person_ComparisonApp:
     global text_font, text_align, title_font, title_align
+    global blank_number, agree_number, not_agree_number, add_number
     is_running = True   #调用function终止本类函数的运行，例如：Person_ComparisonApp.is_running = False即可终止
     # 类的构造函数，用于初始化对象的属性
     def __init__(self, signal_list, logger, output_path=None):
@@ -401,12 +407,10 @@ class Person_ComparisonApp:
             fill_type="solid"
         )
         # 设置左对齐
-        cell1.alignment = Alignment(
-            horizontal="left",    # 水平左对齐（关键）
-            vertical="center",    # 垂直居中（可选，推荐）
-            wrap_text=True       # 自动换行（按需开启）
-        )
-
+        cell1.alignment = text_align
+        # 设置字体
+        cell1.font = text_font
+        
         if fill_color == self.Not_Agreed_color: # 不一致颜色
             # 处理空值
             value1 = cell1.value
@@ -417,7 +421,7 @@ class Person_ComparisonApp:
                 value1 = ""
             if value2 is None:
                 value2 = ""
-            self.logger.debug(f"对比不一致:  \n{value1} \n↑ ↑ ↑\n{value2}\n")
+            # self.logger.debug(f"对比不一致:  \n{value1} \n↑ ↑ ↑\n{value2}\n")
                 
             """通过底层属性设置删除线，兼容更多版本"""
             # 创建InlineFont对象（不直接传strikethrough参数）
@@ -521,9 +525,9 @@ class Person_ComparisonApp:
                     self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Not_Agreed_color)
                     all_cells_empty = False
             if row_isChanged_status_flag:
-                row_changed_list[row1] = 2  #表征本行是否变更的flag，2：对比不一致，红色
+                row_changed_list[row1] = not_agree_number  #表征本行是否变更的flag，2：对比不一致，红色
             else:
-                row_changed_list[row1] = 1  #表征本行是否变更的flag，1：对比一致，绿色
+                row_changed_list[row1] = agree_number  #表征本行是否变更的flag，1：对比一致，绿色
             
             # 空行检测
             if all_cells_empty:
@@ -541,8 +545,8 @@ class Person_ComparisonApp:
         self.create_row_changed_rows(sheet1, row_changed_list)
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
-        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
-        变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == agree_number)}
+        变更行数:{sum(1 for v in row_changed_list.values() if v == not_agree_number)}
         """)
         self.progress_updated.emit(target_progress)
         return sheet1, None
@@ -577,7 +581,7 @@ class Person_ComparisonApp:
         start_time = time.time()
         row_changed_list = {}
         """row_changed_list用于表示本行是否存在变更，
-            0: 表示index未匹配上（无颜色填充），
+            0: 表示空白行（无颜色填充），
             1: 表示行无变更（绿色填充），
             2: 表示行有变更（红色填充），
             3: 表示行新增（青色填充），
@@ -586,6 +590,7 @@ class Person_ComparisonApp:
         max_row1 = sheet1.max_row
         max_row2 = sheet2.max_row
         max_col1 = sheet1.max_column
+        max_col2 = sheet2.max_column
         
         # 索引列去重并保留顺序
         index_value_list = list(dict.fromkeys(index_value_list))
@@ -643,7 +648,7 @@ class Person_ComparisonApp:
         self.logger.info(f"开始对比sheet【{sheet1.title}】单元格")
         # blank_row_flag = 0
         
-        for row1 in range(2, max_row1 + 1):  # 从第2行开始对比（跳过标题行）
+        for row1 in range(1, max_row1 + 1):  # 从第2行开始对比（跳过标题行）
             # 进度更新
             progress_percent += step_progress
             if self.check_thread_running():
@@ -661,8 +666,12 @@ class Person_ComparisonApp:
             
             # 获取目标行号
             row2 = index_column_mapping.get(row1, 0)
-            if row2 == 0:
-                row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
+            print(f"获取目标行号: row2 = {row2}\n sheet1_max_row = {max_row1} ; sheet2_max_row = {max_row2}")
+            if not row2:
+                if row2 is None:
+                    row_changed_list[row1] = blank_number #表征本行是否变更的flag，0：空白行，未匹配上，白色
+                else:
+                    row_changed_list[row1] = add_number #表征本行是否变更的flag，3：未匹配上的新增行，青色
                 
                 # # 检查本行是否存在有效值
                 # if not self.has_valid_data(sheet1, row1):
@@ -676,7 +685,7 @@ class Person_ComparisonApp:
                 #     self.logger.info("连续20行无匹配，结束对比\n")
                 #     break
                 continue
-                
+            
             # blank_row_flag = 0
             row_isChanged_status_flag = False
             
@@ -694,9 +703,9 @@ class Person_ComparisonApp:
                     row_isChanged_status_flag = True
                     self.add_conditional_formatting(sheet1_cell, sheet2_cell, self.Not_Agreed_color)
             if row_isChanged_status_flag:
-                row_changed_list[row1] = 2  #表征本行是否变更的flag，2：对比不一致，红色
+                row_changed_list[row1] = not_agree_number  #表征本行是否变更的flag，2：对比不一致，红色
             else:
-                row_changed_list[row1] = 1  #表征本行是否变更的flag，1：对比一致，绿色
+                row_changed_list[row1] = agree_number  #表征本行是否变更的flag，1：对比一致，绿色
         # 创建变更标记列
         self.create_row_changed_rows(sheet1, row_changed_list)
         end_time = time.time()
@@ -704,16 +713,16 @@ class Person_ComparisonApp:
         self.logger.info(end_time_output)
         
         # 创建新增行数据sheet
-        if sum(1 for v in row_changed_list.values() if v == 3):
-            added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
+        if sum(1 for v in row_changed_list.values() if v == add_number):
+            added_sheet = self.create_unique_sheet(sheet1, row_changed_list, max_col2)
         else:
             added_sheet = None
         
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
-        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
-        变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
-        新增行数:{sum(1 for v in row_changed_list.values() if v == 3)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == agree_number)}
+        变更行数:{sum(1 for v in row_changed_list.values() if v == not_agree_number)}
+        新增行数:{sum(1 for v in row_changed_list.values() if v == add_number)}
         """)
         
         self.progress_current_task.emit(textwrap.dedent(f"""
@@ -907,6 +916,9 @@ class Person_ComparisonApp:
         max_row1 = sheet1.max_row
         row_mapping: Dict[int, int] = {}  # 行映射结果
         # blank_row_count = 0
+        
+        # self.set_rows_color(sheet1, title_row_number, self.None_color, title_font, title_align) # 设置标题行颜色为默认色，避免被后续空行检测误判
+        
         for row1 in range(title_row_number+1, max_row1 + 1):
             if self.check_thread_running():
                 return 0
@@ -942,6 +954,8 @@ class Person_ComparisonApp:
                 #     break
                 if not self.has_valid_data(sheet1, row1):
                     row_mapping[row1] = None
+                    self.set_rows_color(sheet1, row1, self.None_color)
+                    
                 else:
                     # 标记为未匹配并设置颜色
                     row_mapping[row1] = 0
@@ -1007,7 +1021,7 @@ class Person_ComparisonApp:
             # 捕获其他类型的异常，提供更具体的错误信息
             raise ValueError(f"填充行颜色时发生未知错误: {str(e)}") from e
         
-    def create_unique_sheet(self, sheet, row_changed_list):
+    def create_unique_sheet(self, sheet, row_changed_list, sheet2_max_col=None):
         """
         创建新增行数据sheet
         """
@@ -1015,8 +1029,8 @@ class Person_ComparisonApp:
         workbook = openpyxl.Workbook()
         added_sheet = workbook.create_sheet(title="新增行数据")
         
-        # 筛选出值为0的所有键
-        zero_indices = {k: v for k, v in row_changed_list.items() if v == 3}
+        # 筛选出值为3的所有键, 3表示新增行
+        zero_indices = {k: v for k, v in row_changed_list.items() if v == add_number}
         self.logger.info(f"zero_keys = {zero_indices}------------------------------")
 
         
@@ -1029,6 +1043,14 @@ class Person_ComparisonApp:
                 continue
             row_data = [cell.value for cell in sheet[row_idx]]
             row_data[0] = "删除行"
+            
+            # 处理行数据列数不足的情况，进行填充或截断
+            if sheet2_max_col is not None:
+                if len(row_data) < sheet2_max_col:
+                    row_data.extend([None] * (sheet2_max_col - len(row_data) + 1)) # 填充空值以匹配列数
+                elif len(row_data) > sheet2_max_col:
+                    row_data = row_data[:sheet2_max_col+1] # 截断以匹配列数
+            
             added_sheet.append(row_data)
             sheet[row_idx][0].value = "新增"
             
@@ -1036,18 +1058,14 @@ class Person_ComparisonApp:
         for index in range(1, added_sheet.max_row+1):
             self.set_rows_color(added_sheet, index, self.Delete_color)
             # 设置字体
-            added_sheet.cell(row=index, column=1).font = Font(
-                name='Arial',
-                size=12,
-                bold=True,
-                color="000000"  # 黑色字体
-            )
+            added_sheet.cell(row=index, column=1).font = text_font
             # 设置对齐方式
-            added_sheet.cell(row=index, column=1).alignment = Alignment(
-                horizontal='center',  # 水平居中
-                vertical='center',    # 垂直居中
-                wrap_text=True        # 自动换行
-            )
+            added_sheet.cell(row=index, column=1).alignment = text_align
+        # lenth = len(row_changed_list)
+        # outputpath = f".\{lenth}新增行数据.xlsx"
+        # workbook.save(outputpath)
+        # print_info = f"新增行数据已保存到文件: {sheet}新增行数据.xlsx"
+        # print(print_info)
         return added_sheet
     
     def compare_excel_sheet_by_index_mapping_title(
@@ -1084,6 +1102,7 @@ class Person_ComparisonApp:
         # 基础参数获取
         max_row1 = sheet1.max_row
         max_col1 = sheet1.max_column
+        max_col2 = sheet2.max_column
         
         row_changed_list = {}
         """row_changed_list用于表示本行是否存在变更，
@@ -1228,9 +1247,9 @@ class Person_ComparisonApp:
             if not row2:
                 blank_row_flag += 1
                 if row2 == 0:
-                    row_changed_list[row1] = 3 #表征本行是否变更的flag，3：未匹配上的新增行，青色
+                    row_changed_list[row1] = add_number #表征本行是否变更的flag，3：未匹配上的新增行，青色
                 elif row2 is None:
-                    row_changed_list[row1] = 4 #表征本行是否变更的flag，4：整行为空，无色
+                    row_changed_list[row1] = blank_number #表征本行是否变更的flag，4：整行为空，无色
                 else:
                     raise ValueError(f"在列映射进程中，第{row1}列的返回值错误，index_column_mapping[{row1}] = {row2}")
                 continue
@@ -1253,9 +1272,9 @@ class Person_ComparisonApp:
 
             # 记录行变更状态
             if row_isChanged_status_flag:
-                row_changed_list[row1] = 2  #表征本行是否变更的flag，2：对比不一致，红色
+                row_changed_list[row1] = not_agree_number  #表征本行是否变更的flag，2：对比不一致，红色
             else:
-                row_changed_list[row1] = 1  #表征本行是否变更的flag，1：对比一致，绿色
+                row_changed_list[row1] = agree_number  #表征本行是否变更的flag，1：对比一致，绿色
         
         # 创建变更标记列
         self.create_row_changed_rows(sheet1, row_changed_list, title_row_number)
@@ -1269,14 +1288,14 @@ class Person_ComparisonApp:
 
         self.result_info += textwrap.dedent(f"""
         参与对比行数:{len(row_changed_list)}
-        一致行数:{sum(1 for v in row_changed_list.values() if v == 1)}
-        变更行数:{sum(1 for v in row_changed_list.values() if v == 2)}
-        新增行数:{sum(1 for v in row_changed_list.values() if v == 3)}
-        新增列数:{sum(1 for v in title_row_mapping.values() if v == 0)}
+        一致行数:{sum(1 for v in row_changed_list.values() if v == agree_number)}
+        变更行数:{sum(1 for v in row_changed_list.values() if v == not_agree_number)}
+        新增行数:{sum(1 for v in row_changed_list.values() if v == add_number)}
+        新增列数:{sum(1 for v in title_row_mapping.values() if v == add_number)}
         """)
         
         # 创建新增行数据sheet
-        if sum(1 for v in row_changed_list.values() if v == 3):
+        if sum(1 for v in row_changed_list.values() if v == add_number):
             added_sheet = self.create_unique_sheet(sheet1, row_changed_list)
         else:
             added_sheet = None
@@ -1303,7 +1322,7 @@ class Person_ComparisonApp:
         ======================================
         """))
         self.progress_updated.emit(target_progress)
-        return sheet1, added_sheet
+        return sheet1, added_sheet, title_row_mapping
 
     def create_row_changed_rows(self, sheet, row_changed_list, title_row_number=0):
         """
@@ -1442,7 +1461,7 @@ class Person_ComparisonApp:
             return 0
         
         
-    def merge_sheet_to_another(self, source_sheet, target_sheet, skip_header=False):
+    def merge_sheet_to_another(self, source_sheet, target_sheet, title_mapping=None, skip_header=False):
         """
         将源工作表的数据合并到目标工作表的尾部
         Args:
@@ -1456,34 +1475,80 @@ class Person_ComparisonApp:
         self.logger.info(f"工作表 '{target_sheet.title}' 合并'{source_sheet.title}'{source_sheet.max_row}数据，当前合并到第 {start_row} 行--------------------------------------------")
 
         
-        # 遍历源工作表的所有行（row是一个单元格对象的元组）
-        for row_idx, row in enumerate(source_sheet.iter_rows(values_only=False), start=1):
-            # 检查任务是否被终止
-            if self.check_thread_running():
-                return 0
-            # 如果需要跳过表头，且当前是第一行，则跳过
-            if skip_header and row_idx == 1:
-                continue
-            
-            self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行数据")
-            
-            self.logger.info(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行数据")
-            # 遍历行中的每个单元格，复制值和格式到目标工作表
-            for col_idx, cell in enumerate(row, start=1):
-                # 目标单元格位置：start_row + 偏移量（row_idx-1），列索引col_idx
-                target_cell = target_sheet.cell(
-                    row=start_row + (row_idx - 1),
-                    column=col_idx
-                )
-                # self.logger.info(f"row = {start_row + (row_idx - 1)}, col = {col_idx}, value = {cell.value}")
-                # 复制单元格值
-                target_cell.value = cell.value
-                # 复制单元格样式（可选，根据需求决定是否保留格式）
-                target_cell.font = cell.font.copy ()
-                target_cell.fill = cell.fill.copy ()
-                target_cell.border = cell.border.copy ()
-                target_cell.alignment = cell.alignment.copy ()
-        
+        if not title_mapping:   # 如果未提供了标题映射，则直接全部合并进目标sheet
+            # 遍历源工作表的所有行（row是一个单元格对象的元组）
+            for row_idx, row in enumerate(source_sheet.iter_rows(values_only=False), start=1):
+                # 检查任务是否被终止
+                if self.check_thread_running():
+                    return 0
+                # 如果需要跳过表头，且当前是第一行，则跳过
+                if skip_header and row_idx == 1:
+                    continue
+                
+                self.progress_current_task.emit(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行数据")
+                
+                self.logger.info(f"工作表 '{target_sheet.title}' 合并第 {row_idx} 行数据")
+                # 遍历行中的每个单元格，复制值和格式到目标工作表
+                for col_idx, cell in enumerate(row, start=1):
+                    # 目标单元格位置：start_row + 偏移量（row_idx-1），列索引col_idx
+                    target_cell = target_sheet.cell(
+                        row=start_row + (row_idx - 1),
+                        column=col_idx
+                    )
+                    # self.logger.info(f"row = {start_row + (row_idx - 1)}, col = {col_idx}, value = {cell.value}")
+                    # 复制单元格值
+                    target_cell.value = cell.value
+                    # 复制单元格样式（可选，根据需求决定是否保留格式）
+                    target_cell.font = cell.font.copy ()
+                    target_cell.fill = cell.fill.copy ()
+                    target_cell.border = cell.border.copy ()
+                    target_cell.alignment = cell.alignment.copy ()
+        else:
+            # 如果提供了标题映射，则根据映射关系进行列对齐
+            for target_row_idx in range(start_row, start_row + source_sheet.max_row):
+                # 检查任务是否被终止
+                print(f"正在处理目标工作表行号: {target_row_idx}")
+                if self.check_thread_running():
+                    return 0
+                # 如果需要跳过表头，且当前是第一行，则跳过
+                if skip_header and target_row_idx == 1:
+                    continue
+                # 遍历行中的每个单元格，复制值和格式到目标工作表
+                for target_col_idx in range(1, target_sheet.max_column + 1):
+                    # print(f"正在处理目标工作表列号: {target_col_idx}, 行号: {target_row_idx}")
+                    if target_col_idx == 1:
+                        target_cell = target_sheet.cell(row=target_row_idx, column=target_col_idx)
+                        target_cell.value = source_sheet.cell(row=target_row_idx - (start_row - 1), column=1).value
+                        # 复制单元格样式（可选，根据需求决定是否保留格式）
+                        target_cell.font = source_sheet.cell(target_row_idx - (start_row - 1),1).font.copy () if source_sheet.cell(target_row_idx - (start_row - 1),1) else None
+                        target_cell.fill = source_sheet.cell(target_row_idx - (start_row - 1),1).fill.copy () if source_sheet.cell(target_row_idx - (start_row - 1),1) else None
+                        target_cell.border = source_sheet.cell(target_row_idx - (start_row - 1),1).border.copy () if source_sheet.cell(target_row_idx - (start_row - 1),1) else None
+                        target_cell.alignment = source_sheet.cell(target_row_idx - (start_row - 1),1).alignment.copy () if source_sheet.cell(target_row_idx - (start_row - 1),1) else None
+                        continue
+                    source_col = title_mapping.get(target_col_idx-1, 0)
+                    target_cell = target_sheet.cell(row=target_row_idx, column=target_col_idx)
+                    print(f"正在处理目标工作表列号: {target_col_idx}, 行号: {target_row_idx}, 映射源列号: {source_col}")
+                    if source_col == 0:
+                        # self.logger.info(f"目标列 {target_col_idx} 在标题映射中未找到对应源列，跳过该列")
+                        target_cell.value = "kkkkk"
+                        # 复制单元格样式（可选，根据需求决定是否保留格式）
+                        target_cell.font = source_sheet.cell(1,1).font.copy ()
+                        target_cell.fill = source_sheet.cell(1,1).fill.copy ()
+                        target_cell.border = source_sheet.cell(1,1).border.copy ()
+                        target_cell.alignment = source_sheet.cell(1,1).alignment.copy ()
+                        continue
+                    
+                    source_cell = source_sheet.cell(
+                        row = target_row_idx - (start_row - 1),  # 计算对应的源行索引
+                        column=source_col+1
+                    )
+                    # 复制单元格值
+                    target_cell.value = source_cell.value
+                    # 复制单元格样式（可选，根据需求决定是否保留格式）
+                    target_cell.font = source_cell.font.copy ()
+                    target_cell.fill = source_cell.fill.copy ()
+                    target_cell.border = source_cell.border.copy ()
+                    target_cell.alignment = source_cell.alignment.copy ()
         return 1
     
 

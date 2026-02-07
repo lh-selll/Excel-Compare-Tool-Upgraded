@@ -733,7 +733,7 @@ class DataProcessor(QThread):
                     self.chart_data_container_list[-1].create_chart_data_range(report_data_gap_cols+1, report_data_gap_cols+2, report_data_current_row, report_data_current_row+3)
                     report_data_current_row += report_data_gap_row+2
                     self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet_by_index_mapping_title, row_data.col = {row_data.col}, row_data.title_row = {row_data.title_row}")
-                    status1, add_sheet1 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
+                    status1, add_sheet1, sheet1_title_mapping = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb1_sheet, wb2_sheet, row_data.col, row_data.title_row, file1_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status1:
                         raise ValueError(f"用户终止对比进程")
                     
@@ -743,7 +743,7 @@ class DataProcessor(QThread):
                     self.logger.info(f"当前行数为：{inspect.currentframe().f_lineno} compare_excel_sheet")
                     
                     current_progress_percent += delta_progress
-                    status2, add_sheet2 = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, row_data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
+                    status2, add_sheet2, sheet2_title_mapping = self.CompareApp.compare_excel_sheet_by_index_mapping_title(wb2_sheet, wb1_sheet_copy, row_data.col, row_data.title_row, file2_name, current_progress_percent, current_progress_percent+delta_progress)
                     if not status2:
                         raise ValueError(f"用户终止对比进程")
 
@@ -753,17 +753,16 @@ class DataProcessor(QThread):
                     delete_row_number2 = 0
 
                     if add_sheet2:
-                        if not self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet):
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet2, wb1_sheet ,sheet1_title_mapping):
                             raise ValueError(f"用户终止对比进程")
 
                         delete_row_number1 = add_sheet2.max_row
 
                     if add_sheet1:
-                        if not self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet):
+                        if not self.CompareApp.merge_sheet_to_another(add_sheet1, wb2_sheet, sheet2_title_mapping):
                             raise ValueError(f"用户终止对比进程")
 
                         delete_row_number2 = add_sheet1.max_row
-                    
 
                     #更新整体对比进度
                     current_progress_percent += delta_progress
