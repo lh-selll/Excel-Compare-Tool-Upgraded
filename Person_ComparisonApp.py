@@ -1530,7 +1530,7 @@ class Person_ComparisonApp:
                     print(f"正在处理目标工作表列号: {target_col_idx}, 行号: {target_row_idx}, 映射源列号: {source_col}")
                     if source_col == 0:
                         # self.logger.info(f"目标列 {target_col_idx} 在标题映射中未找到对应源列，跳过该列")
-                        target_cell.value = "kkkkk"
+                        target_cell.value = ""
                         # 复制单元格样式（可选，根据需求决定是否保留格式）
                         target_cell.font = source_sheet.cell(1,1).font.copy ()
                         target_cell.fill = source_sheet.cell(1,1).fill.copy ()

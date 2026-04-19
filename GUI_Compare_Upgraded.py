@@ -45,6 +45,8 @@ from Log_Manager import BackgroundLogManager
 FILE_ATTRIBUTE_HIDDEN = 0x02  # 隐藏属性（浅色显示关键）
 FILE_ATTRIBUTE_SYSTEM = 0x04  # 系统属性（强化隐藏）
 
+EnableSignatureVerify = True  # 是否启用签名验证（控制开关）
+
 output_path = '.\\outputfile'
 json_file_path = '.\\json\\config.json'
 license_file_path = '.\\license\\license.key'
@@ -2471,10 +2473,12 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)  
 
 class InitialScreen(QWidget):
+    global Global_Logger
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.setup_ui()
         self.main_window = main_window
+        self.logger = Global_Logger
         
         # 加载背景图片（使用修复后的图片路径）
         self.background_pixmap = QPixmap(resource_path("ICO/GUI_ICO2.png"))
@@ -2592,7 +2596,7 @@ class InitialScreen(QWidget):
         
     def closeEvent(self, event):
         """窗口关闭时，主动关闭日志线程"""
-        self.log_manager.shutdown()  # 关键：显式关闭日志线程
+        self.logger.shutdown()  # 关键：显式关闭日志线程
         event.accept()
 
 
@@ -2612,13 +2616,18 @@ try:
     # 创建主窗口实例（DataProcessingTool 类应继承自 QMainWindow 或 QWidget）
     print("创建主窗口实例")
     window = DataProcessingTool()
-    # initial_screen = InitialScreen(window)
-    # initial_screen.show()
-    InitialScreen.license_verify(license_file_path)
-
-    # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
-    print("show")
-    window.show()
+    if EnableSignatureVerify:
+        # 显示初始界面并进行许可证验证
+        initial_screen = InitialScreen(window)
+        initial_screen.show()
+        InitialScreen.license_verify(license_file_path)
+    
+    else:
+        # 进入 Qt 应用程序的事件循环，等待用户交互或系统事件
+        print("show")
+        window.show()   
+    
+    # 初始化界面元素（如表格、下拉框等），准备好接受用户输入
     print("init_ui")
     window.init_ui()
     print("restore_data")
