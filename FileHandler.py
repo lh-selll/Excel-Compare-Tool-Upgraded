@@ -377,11 +377,11 @@ class FileHandler:
             return True, error
             
         except (FileNotFoundError, ValueError, OSError) as e:
-            self.logger.error(f"文件打开发生错误: {e}")
+            print(f"文件打开发生错误: {e}")
             error = f"文件打开发生错误: {e}"
             return False, error
         except Exception as e:
-            self.logger.error(f"文件打开时发生未知错误: {e}")
+            print(f"文件打开时发生未知错误: {e}")
             error = f"文件打开时发生未知错误: {e}"
             return False, error
         

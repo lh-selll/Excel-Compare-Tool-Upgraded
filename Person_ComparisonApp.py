@@ -64,14 +64,14 @@ class Person_ComparisonApp:
         # self.logger_info            = signal_list.output_logger              #用于返回日志信息，用于记录对比过程中的信息
 
 
-        self.output_path = output_path                    # 输出文件路径
-        self.Progress_percent = 0                         # 当前进度百分比
-        self.Agreed_color = "AFFFAF"  # 一致时填充色（浅绿色）
-        self.Not_Agreed_color = "E57373"  # 不一致时填充色（红色）
-        self.No_match_color = "D3E3FD"  # 未匹配时填充色（青色）
-        self.None_color = "FFFFFF"  # 空值填充色（白色）
-        self.Delete_color = "696969"  # 删除行填充色（灰色）
-        self.Title_row_color = "F5F5F5"  # 标题行填充色（浅灰）
+        self.output_path = output_path                      # 输出文件路径
+        self.Progress_percent = 0                           # 当前进度百分比
+        self.Agreed_color = "AFFFAF"        # 一致，浅绿    → RGB(175, 255, 175)
+        self.Not_Agreed_color = "E57373"    # 差异点，红色  → RGB(229, 115, 115)
+        self.No_match_color = "D3E3FD"      # 未匹配，浅蓝  → RGB(211, 227, 253)
+        self.None_color = "FFFFFF"          # 空值，白色    → RGB(255, 255, 255)
+        self.Delete_color = "696969"        # 删除行，深灰  → RGB(105, 105, 105)
+        self.Title_row_color = "F5F5F5"     # 标题行，浅灰  → RGB(245, 245, 245)
 
         self.update_frequency = 30  # 状态更新频率，防止UI卡顿
         self.result_info = None     #用于保存本次对比结果
@@ -1406,49 +1406,51 @@ class Person_ComparisonApp:
             # 设置边框
             sheet.cell(row=key, column=1).border = thin_border
 
-    def saving_file(self, wb1, output_path):
-        """
-        保存对比后的工作簿
+    # def saving_file(self, wb1, output_path):
+    #     """
+    #     保存对比后的工作簿
         
-        Args:
-            wb1: 工作簿对象
-            output_path: 输出路径
+    #     Args:
+    #         wb1: 工作簿对象
+    #         output_path: 输出路径
             
-        Returns:
-            int: 1表示成功，0表示失败
-        """
-        # 保存第一个工作簿，此时已包含对比和填充颜色后的结果
-        try:
-            self.logger.info(f"saving file")
-            self.progress_current_task.emit(f"对比完成，文件保存中···")
-            self.logger.info(f"对比完成，文件保存中···")
-            wb1.save(output_path)
-            self.logger.info(f"file saved")
-        except Exception as e:
-            if isinstance(e, PermissionError):
-                error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
-            elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
-                error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
-            elif isinstance(e, FileNotFoundError):
-                error = f"保存文件时文件路径不存在：{str(e)}"
-                try:
-                    os.mkdir(output_path.replace(".\\", ""))
-                    error = f"文件夹 {output_path} 创建成功。"
-                    wb1.save(output_path)
-                except FileExistsError:
-                    error = f"文件夹 {output_path} 已经存在。"
-                except PermissionError:
-                    error = f"没有权限创建文件夹 {output_path}。"
-            else:
-                error = f"保存文件时出现未知错误：{str(e)}"
-            self.logger.info(error)
-            self.error_occurred.emit("WARNING", error, None)
-            self.Progress_percent = 0
-            self.progress_current_task.emit(f"对比完成，File1保存成功")
-            self.logger.info(f"对比完成，File1保存成功")
-            return 0, None
+    #     Returns:
+    #         int: 1表示成功，0表示失败
+    #     """
+    #     # 保存第一个工作簿，此时已包含对比和填充颜色后的结果
+    #     # 实例化工具
+    #     excel_synccolor_maker = ExcelSyncColorMaker()
+    #     try:
+    #         self.logger.info(f"saving file")
+    #         self.progress_current_task.emit(f"对比完成，文件保存中···")
+    #         self.logger.info(f"对比完成，文件保存中···")
+    #         wb1.save(output_path)
+    #         self.logger.info(f"file saved")
+    #     except Exception as e:
+    #         if isinstance(e, PermissionError):
+    #             error = f"没有权限保存文件到指定路径，请检查文件权限设置。"
+    #         elif isinstance(e, OSError) and "磁盘空间不足" in str(e):
+    #             error = f"磁盘空间不足，无法保存文件，请清理磁盘空间后再试。"
+    #         elif isinstance(e, FileNotFoundError):
+    #             error = f"保存文件时文件路径不存在：{str(e)}"
+    #             try:
+    #                 os.mkdir(output_path.replace(".\\", ""))
+    #                 error = f"文件夹 {output_path} 创建成功。"
+    #                 wb1.save(output_path)
+    #             except FileExistsError:
+    #                 error = f"文件夹 {output_path} 已经存在。"
+    #             except PermissionError:
+    #                 error = f"没有权限创建文件夹 {output_path}。"
+    #         else:
+    #             error = f"保存文件时出现未知错误：{str(e)}"
+    #         self.logger.info(error)
+    #         self.error_occurred.emit("WARNING", error, None)
+    #         self.Progress_percent = 0
+    #         self.progress_current_task.emit(f"对比完成，File1保存成功")
+    #         self.logger.info(f"对比完成，File1保存成功")
+    #         return 0, None
             
-        return 1
+    #     return 1
 
     def check_thread_running(self):
         """检查线程是否在运行（用于终止任务）"""

@@ -41,6 +41,7 @@ from Deviceid_license_verify import DeviceIDLicenseVerify
 from FileHandler import FileHandler
 from Excel_chart_manager import ExcelChartManager
 from Log_Manager import BackgroundLogManager
+from excel_sync_color import ExcelSyncColorMaker
 
 FILE_ATTRIBUTE_HIDDEN = 0x02  # 隐藏属性（浅色显示关键）
 FILE_ATTRIBUTE_SYSTEM = 0x04  # 系统属性（强化隐藏）
@@ -516,6 +517,9 @@ class DataProcessor(QThread):
         current_progress_percent = 0    #当前进度条数值
         wb1 = None
         wb2 = None
+        
+        # 实例化工具
+        excel_synccolor_maker = ExcelSyncColorMaker()
         restored_config_data = restored_config_data_Container(len(self.config_data))
         restored_config_data.file1_path = self.file1_path
         restored_config_data.file2_path = self.file2_path
@@ -561,6 +565,8 @@ class DataProcessor(QThread):
                 file2_ext = '.xlsx'
             output_path1 = os.path.join(output_path, f"{file1_name}-compare{file1_ext}")
             output_path2 = os.path.join(output_path, f"{file2_name}-compare{file2_ext}")
+            xlsm_output_path1 = os.path.join(output_path, f"{file1_name}-compare.xlsm")
+            xlsm_output_path2 = os.path.join(output_path, f"{file2_name}-compare.xlsm")
 
             # 处理配置数据
             results = []
@@ -862,6 +868,31 @@ class DataProcessor(QThread):
                     self.exec()
                     if not self.return_value:
                         raise ValueError(f"文件保存失败：{str(e)}")
+                    
+            # 插入VBA宏代码及同步按钮
+            # 核心调用：仅传文件路径、工作表名、输出xlsm路径
+            sheet1_name_list = []
+            sheet2_name_list = []
+            for row_data in results_data:
+                sheet1_name_list.append(row_data.sheet1_name)
+                sheet2_name_list.append(row_data.sheet2_name)
+                
+            
+            excel_synccolor_maker.add_macro_to_excel(
+                file_path = output_path1,
+                sheet_name_list = sheet1_name_list,
+                save_xlsm_path = xlsm_output_path1
+            )
+            
+            excel_synccolor_maker.add_macro_to_excel(
+                file_path = output_path2,
+                sheet_name_list = sheet2_name_list,
+                save_xlsm_path = xlsm_output_path2
+            )
+            
+            FileHandler.delete_file(output_path1)
+            FileHandler.delete_file(output_path2)
+            
             saving_compeleted_time = time.time()
             self.signal_list.progress_current_task.emit(textwrap.dedent(f"""
             ======================================
@@ -1702,17 +1733,27 @@ class DataProcessingTool(QMainWindow):
         if up_or_down == 0:
             status, error = self.file_operator.open_excel_file(self.output_file_path1)
             if status == 0:
-                self.signal_list.error_occurred.emit("WARNING", error, None)
-                return False, error
+                file_name, file_ext = os.path.splitext(os.path.basename(self.output_file_path1))
+                output_file_path = os.path.join(output_path, f"{file_name}.xlsm")
+                status, error = self.file_operator.open_excel_file(output_file_path)
+                if status == 0:
+                    self.signal_list.error_occurred.emit("WARNING", error, None)
+                    return False, error
             self.logger.info(f"成功打开Excel文件1: {self.output_file_path1}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件1: {self.output_file_path1}")
+        
         elif up_or_down == 1:
             status, error = self.file_operator.open_excel_file(self.output_file_path2)
             if status == 0:
-                self.signal_list.error_occurred.emit("WARNING", error, None)
-                return False, error
+                file_name, file_ext = os.path.splitext(os.path.basename(self.output_file_path2))
+                output_file_path = os.path.join(output_path, f"{file_name}.xlsm")
+                status, error = self.file_operator.open_excel_file(output_file_path)
+                if status == 0:
+                    self.signal_list.error_occurred.emit("WARNING", error, None)
+                    return False, error
             self.logger.info(f"成功打开Excel文件2: {self.output_file_path2}")
             self.current_task_edit.appendPlainText(f"成功打开Excel文件2: {self.output_file_path2}")
+        
         else:
             self.logger.info("未知错误")
             return False
