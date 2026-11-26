@@ -18,8 +18,13 @@ class DeviceIDLicenseVerify():
         result = None
         try:
             # 尝试使用wmic命令获取设备ID
+            # Windows11新版本移除wmic，使用新的powershell "(Get-CimInstance Win32_ComputerSystemProduct).UUID"
             result = subprocess.run(
-                ["wmic", "csproduct", "get", "uuid"],
+                [
+                    "powershell",
+                    "-Command",
+                    "(Get-CimInstance Win32_ComputerSystemProduct).UUID"
+                ],
                 capture_output=True,
                 text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW
@@ -34,9 +39,9 @@ class DeviceIDLicenseVerify():
             # 调试信息
             print(f"解析后的行: {lines}")
 
-            if len(lines) >= 2:
+            if len(lines) >= 1:
                 # 取第二行作为设备ID
-                device_id = lines[1]
+                device_id = lines[0]
 
                 # 调试信息
                 print(f"提取的设备ID: {device_id}")
